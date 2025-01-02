@@ -42,6 +42,33 @@ class BillTrackerApp:
             self.user_manager = UserManager()
             st.set_page_config(page_title='每日账单管理', page_icon='💰')
             
+            # 自定义侧边栏样式
+            st.markdown("""
+            <style>
+            .sidebar .sidebar-content {
+                background-color: #f4f6f9;  /* 更柔和的背景色 */
+                border-radius: 15px;  /* 更圆的圆角 */
+                padding: 20px;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);  /* 更轻的阴影 */
+            }
+            .sidebar .stRadio > label {
+                font-weight: 700;  /* 更粗的字体 */
+                color: #2c3e50;  /* 更深的文字颜色 */
+                font-size: 16px;  /* 稍大的字体 */
+            }
+            .sidebar .stRadio > div > div > label {
+                color: #34495e;  /* 选项文字颜色 */
+                font-weight: 500;
+            }
+            .sidebar .stRadio > div > div {
+                background-color: #ffffff;  /* 纯白背景 */
+                border-radius: 8px;  /* 圆角 */
+                padding: 10px;
+                border: 1px solid #ecf0f1;  /* 轻微边框 */
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            
             # 初始化会话状态
             if 'logged_in' not in st.session_state:
                 st.session_state.logged_in = False
@@ -95,28 +122,38 @@ class BillTrackerApp:
             self.login_page()
             return
         
+        st.sidebar.header('💰 财务追踪器')
+        
+        # 页面导航
+        menu = st.sidebar.radio(
+            '选择功能', 
+            [
+                '账单录入', 
+                '财务看板', 
+                '账单统计', 
+                '账单查询', 
+                '年度总览'
+            ]
+        )
+        
+        st.title('💰 每日账单管理系统')
+        
+        if menu == '账单录入':
+            self.record_bill_page()
+        elif menu == '财务看板':
+            self.dashboard_page()
+        elif menu == '账单统计':
+            self.bill_statistics_page()
+        elif menu == '账单查询':
+            self.query_bills_page()
+        elif menu == '年度总览':
+            self.annual_overview_page()
+        
         st.sidebar.text(f'欢迎，{st.session_state.username}')
         if st.sidebar.button('退出登录'):
             st.session_state.logged_in = False
             st.session_state.username = None
             st.rerun()
-        
-        st.title('💰 每日账单管理系统')
-        
-        # 侧边栏菜单
-        menu = st.sidebar.radio('功能菜单', 
-            ['记录账单', '账单统计', '账单查询', '财务看板', '年度总览'])
-        
-        if menu == '记录账单':
-            self.record_bill_page()
-        elif menu == '账单统计':
-            self.bill_statistics_page()
-        elif menu == '账单查询':
-            self.query_bills_page()
-        elif menu == '财务看板':
-            self.dashboard_page()
-        elif menu == '年度总览':
-            self.annual_overview_page()
     
     def record_bill_page(self):
         """记录账单页面"""
