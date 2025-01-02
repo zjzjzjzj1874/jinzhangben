@@ -475,9 +475,23 @@ class BillTrackerApp:
                     income_data, 
                     values='amount', 
                     names='category', 
-                    title='收入分类'
+                    title='收入分类',
+                    hole=0.3,  # 添加中心空洞
+                    labels={'category': '类别', 'amount': '金额'},
+                    color_discrete_sequence=px.colors.qualitative.Pastel  # 使用柔和的颜色
                 )
-                st.plotly_chart(fig_income)
+                fig_income.update_traces(textposition='inside', textinfo='percent+label')
+                fig_income.update_layout(
+                    margin=dict(t=50, b=0, l=0, r=0),  # 调整边距
+                    legend=dict(
+                        orientation="h",  # 水平图例
+                        yanchor="bottom",
+                        y=1.02,
+                        xanchor="center",
+                        x=0.5
+                    )
+                )
+                st.plotly_chart(fig_income, use_container_width=True)
             
             # 支出类别饼图
             expense_categories = [cat for cat in category_summary['category'] 
@@ -493,9 +507,23 @@ class BillTrackerApp:
                     expense_data, 
                     values='amount', 
                     names='category', 
-                    title='支出分类'
+                    title='支出分类',
+                    hole=0.3,  # 添加中心空洞
+                    labels={'category': '类别', 'amount': '金额'},
+                    color_discrete_sequence=px.colors.qualitative.Pastel1  # 使用另一组柔和的颜色
                 )
-                st.plotly_chart(fig_expense)
+                fig_expense.update_traces(textposition='inside', textinfo='percent+label')
+                fig_expense.update_layout(
+                    margin=dict(t=50, b=0, l=0, r=0),  # 调整边距
+                    legend=dict(
+                        orientation="h",  # 水平图例
+                        yanchor="bottom",
+                        y=1.02,
+                        xanchor="center",
+                        x=0.5
+                    )
+                )
+                st.plotly_chart(fig_expense, use_container_width=True)
             
             # 显示统计周期
             st.write(f"统计周期：{summary['start_date']} 至 {summary['end_date']}")
