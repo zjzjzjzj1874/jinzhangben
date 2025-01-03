@@ -40,7 +40,7 @@ class BillTrackerApp:
         try:
             self.db = BillDatabase(port=27017)
             self.user_manager = UserManager()
-            st.set_page_config(page_title='每日账单管理', page_icon='💰')
+            st.set_page_config(page_title='金账本', page_icon='💰')
             
             # 自定义侧边栏样式
             st.markdown("""
@@ -81,7 +81,7 @@ class BillTrackerApp:
     
     def login_page(self):
         """登录页面"""
-        st.title('💰 每日账单管理系统 - 登录')
+        st.title('💰 金账本 - 登录')
         
         username = st.text_input('用户名')
         password = st.text_input('密码', type='password')
@@ -100,20 +100,21 @@ class BillTrackerApp:
                     st.error('用户名或密码错误')
                     logger.warning(f"登录失败：{username}")
         
-        with col2:
-            if st.button('注册'):
-                new_username = st.text_input('新用户名')
-                new_password = st.text_input('新密码', type='password')
-                confirm_password = st.text_input('确认密码', type='password')
+        # 注册按钮暂时隐藏
+        # with col2:
+        #     if st.button('注册'):
+        #         new_username = st.text_input('新用户名')
+        #         new_password = st.text_input('新密码', type='password')
+        #         confirm_password = st.text_input('确认密码', type='password')
                 
-                if new_password == confirm_password:
-                    if self.user_manager.add_user(new_username, new_password):
-                        st.success('注册成功！')
-                        logger.info(f"用户 {new_username} 注册成功", extra={"ip": get_client_ip()})
-                    else:
-                        st.error('用户名已存在')
-                else:
-                    st.error('两次密码不一致')
+        #         if new_password == confirm_password:
+        #             if self.user_manager.add_user(new_username, new_password):
+        #                 st.success('注册成功！')
+        #                 logger.info(f"用户 {new_username} 注册成功", extra={"ip": get_client_ip()})
+        #             else:
+        #                 st.error('用户名已存在')
+        #         else:
+        #             st.error('两次密码不一致')
     
     def run(self):
         """运行Streamlit应用"""
@@ -122,7 +123,7 @@ class BillTrackerApp:
             self.login_page()
             return
         
-        st.sidebar.header('💰 财务追踪器')
+        st.sidebar.header('💰 金账本')
         
         # 页面导航
         menu = st.sidebar.radio(
@@ -136,7 +137,7 @@ class BillTrackerApp:
             ]
         )
         
-        st.title('💰 每日账单管理系统')
+        st.title('💰 金账本')
         
         if menu == '账单录入':
             self.record_bill_page()

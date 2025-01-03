@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  web:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/
+    depends_on:
+      - mongo
+    restart: unless-stopped
+    command: sh -c "streamlit run app.py"
+
+  mongo:
+    image: mongo:latest
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+
+volumes:
+  mongo_data:

@@ -29,16 +29,26 @@ logger.add(os.path.join(log_dir, 'bill_database_{time:YYYY-MM-DD}.log'),
 )
 
 class BillDatabase:
-    def __init__(self, host='localhost', port=27017, db_name='bill_tracker'):
+    def __init__(self, host=None, port=27017, db_name='bill_tracker'):
         """
         初始化数据库连接
         
-        :param host: MongoDB主机地址
+        :param host: MongoDB主机地址，默认为None，使用环境变量或容器内默认地址
         :param port: MongoDB端口
         :param db_name: 数据库名称
         """
         try:
-            self.client = pymongo.MongoClient(host, port)
+            # 优先使用环境变量中的 MONGO_URI
+            mongo_uri = os.getenv('MONGO_URI')
+            
+            if mongo_uri:
+                # 使用环境变量中的连接字符串
+                self.client = pymongo.MongoClient(mongo_uri)
+            else:
+                # 如果没有环境变量，使用默认容器内地址
+                host = host or 'mongo'  # Docker Compose 中的服务名
+                self.client = pymongo.MongoClient(host, port)
+            
             self.db = self.client[db_name]
             self.collection = self.db['bills']
             
@@ -49,7 +59,7 @@ class BillDatabase:
             # 只在初始化时记录IP
             logger.info(f"成功连接到MongoDB数据库: {host}:{port}/{db_name}", extra={"ip": get_client_ip()})
         except Exception as e:
-            logger.error(f"数据库连接失败: {e}")
+            logger.error(f"连接MongoDB失败: {e}")
             raise
     
     def insert_bill(self, bill_data):
