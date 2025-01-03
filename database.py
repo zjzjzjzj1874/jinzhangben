@@ -45,9 +45,17 @@ class BillDatabase:
                 # 使用环境变量中的连接字符串
                 self.client = pymongo.MongoClient(mongo_uri)
             else:
-                # 如果没有环境变量，使用默认容器内地址
-                host = host or 'mongo'  # Docker Compose 中的服务名
-                self.client = pymongo.MongoClient(host, port)
+                # 检查是否在容器内运行
+                is_docker = os.path.exists('/.dockerenv')
+                
+                if is_docker:
+                    # 容器内使用服务名
+                    host = host or 'mongo'
+                    self.client = pymongo.MongoClient(host, port)
+                else:
+                    # 本地开发使用 localhost
+                    host = host or 'localhost'
+                    self.client = pymongo.MongoClient(host, port)
             
             self.db = self.client[db_name]
             self.collection = self.db['bills']
