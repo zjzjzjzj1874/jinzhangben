@@ -1,4 +1,4 @@
-# 金账本 (Daily Expense Tracker)
+# 金账本 (Jinzhangben)
 
 ## 项目简介 (Project Overview)
 
@@ -153,7 +153,7 @@ jinzhangben/
 5. 提交 Pull Request
 
 ## 许可证 (License)
-MIT License
+Apache License
 
 ## 联系 (Contact)
 
