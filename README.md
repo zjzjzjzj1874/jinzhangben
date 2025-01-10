@@ -85,7 +85,47 @@ source venv/bin/activate  # macOS/Linux
 pip3 install -r requirements.txt
 ```
 
-4. 启动应用
+<details>
+<summary>4. 配置 MongoDB</summary>
+
+```bash
+# 安装 MongoDB（根据操作系统选择对应命令）
+
+# macOS (使用 Homebrew)
+brew tap mongodb/brew
+brew install mongodb-community
+
+# Ubuntu
+sudo apt-get install mongodb
+
+# Windows
+# 请访问 MongoDB 官网下载安装包：https://www.mongodb.com/try/download/community
+
+# 启动 MongoDB 服务
+# macOS
+brew services start mongodb-community
+
+# Ubuntu
+sudo service mongodb start
+
+# Windows
+# 通过服务管理器启动 MongoDB 服务
+```
+
+> 注意：确保 MongoDB 服务正在运行，否则应用将无法正常工作。如需查看 MongoDB 服务状态：
+> - macOS: `brew services list`
+> - Ubuntu: `sudo service mongodb status`
+> - Windows: 在服务管理器中查看 MongoDB 服务状态
+</details>
+
+
+5. 配置数据库连接
+```bash
+# 在项目根目录创建 .env 文件，添加以下内容：
+MONGODB_URI=mongodb://localhost:27017/bill_system
+```
+
+6. 启动应用
 ```bash
 streamlit run app.py
 ```
