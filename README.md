@@ -6,6 +6,30 @@
 
 This is a personal finance management application built with Streamlit and MongoDB, helping users easily record, analyze, and track daily income and expenses.
 
+## 项目展示
+
+### 登录页面
+![登录页面](./static/login.png)
+
+### 导航栏
+![导航栏](./static/navigate.png)
+
+### 账单录入
+![账单录入](./static/record_bill.png)
+
+### 财务看板
+![财务看板](./static/finance_board.png)
+
+### 账单统计
+![账单统计](./static/bill_statistics.png)
+
+### 账单查询
+![账单查询](./static/bill_query.png)
+![账单关键词查询](./static/find_keyword.png)
+
+### 账单总览
+![账单总览](./static/bill_overview.png)
+
 ## 技术栈 (Tech Stack)
 
 - **前端框架**: Streamlit
