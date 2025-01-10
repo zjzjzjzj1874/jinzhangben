@@ -8,27 +8,48 @@ This is a personal finance management application built with Streamlit and Mongo
 
 ## 项目展示
 
-### 登录页面
+<details>
+<summary>登录页面</summary>
+
 ![登录页面](./static/login.png)
+</details>
 
-### 导航栏
+<details>
+<summary>导航栏</summary>
+
 ![导航栏](./static/navigate.png)
+</details>
 
-### 账单录入
+<details>
+<summary>账单录入</summary>
+
 ![账单录入](./static/record_bill.png)
+</details>
 
-### 财务看板
+<details>
+<summary>财务看板</summary>
+
 ![财务看板](./static/finance_board.png)
+</details>
 
-### 账单统计
+<details>
+<summary>账单统计</summary>
+
 ![账单统计](./static/bill_statistics.png)
+</details>
 
-### 账单查询
+<details>
+<summary>账单查询</summary>
+
 ![账单查询](./static/bill_query.png)
 ![账单关键词查询](./static/find_keyword.png)
+</details>
 
-### 账单总览
+<details>
+<summary>账单总览</summary>
+
 ![账单总览](./static/bill_overview.png)
+</details>
 
 ## 技术栈 (Tech Stack)
 
