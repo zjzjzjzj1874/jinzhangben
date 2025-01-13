@@ -6,5 +6,7 @@ logs
 
 venv
 
+*.local.*
+
 # addUser.py
 
