@@ -2,7 +2,7 @@
 Author: zjzjzjzj1874 zjzjzjzj1874@gmail.com
 Date: 2025-01-02 15:14:19
 LastEditors: zjzjzjzj1874 zjzjzjzj1874@gmail.com
-LastEditTime: 2025-01-19 21:20:40
+LastEditTime: 2025-01-30 20:34:48
 FilePath: /bill-py-streamlit/bill_types.py
 Description: 账单类型
 '''
@@ -27,6 +27,7 @@ class BillCategory:
         CAR_INSURANCE = "小车保险"
         CAR_GAS = "小车加油"
         PARKING = "停车费"
+        TOLL = "过路费"
         CLOTHING = "服饰"
         TRAVEL = "旅行"
         BOOKS = "书籍"
