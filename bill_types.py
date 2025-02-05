@@ -2,7 +2,7 @@
 Author: zjzjzjzj1874 zjzjzjzj1874@gmail.com
 Date: 2025-01-02 15:14:19
 LastEditors: zjzjzjzj1874 zjzjzjzj1874@gmail.com
-LastEditTime: 2025-01-30 20:34:48
+LastEditTime: 2025-01-30 20:39:51
 FilePath: /bill-py-streamlit/bill_types.py
 Description: 账单类型
 '''
@@ -31,6 +31,7 @@ class BillCategory:
         CLOTHING = "服饰"
         TRAVEL = "旅行"
         BOOKS = "书籍"
+        HEALTHY = "医疗保健"
         FITNESS = "运动健身"
         SOCIAL = "人情往来"
         DRESS = "美妆"
