@@ -25,7 +25,7 @@ services:
       - "37017:27017"  # 将容器的27017端口映射到宿主机的37017端口
     volumes:
       - mongo_data:/data/db
-    restart: unless-stopped
+    restart: always
     networks:
       - streamlit-net  # 让mongo服务也加入到同一网络
 
