@@ -2,7 +2,7 @@
 Author: zjzjzjzj1874 zjzjzjzj1874@gmail.com
 Date: 2025-01-02 15:14:19
 LastEditors: zjzjzjzj1874 zjzjzjzj1874@gmail.com
-LastEditTime: 2025-01-30 20:39:51
+LastEditTime: 2025-07-20 18:16:38
 FilePath: /bill-py-streamlit/bill_types.py
 Description: 账单类型
 '''
@@ -19,6 +19,7 @@ class BillCategory:
         """支出类型"""
         FOOD = "餐饮"
         BADMINTON = "羽毛球"
+        BADMINTONCOURT = "羽毛球教学场地"
         TRANSPORTATION = "交通"
         ENTERTAINMENT = "娱乐"
         DAILY_NECESSITIES = "日用品"

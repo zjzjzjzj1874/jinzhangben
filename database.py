@@ -29,15 +29,19 @@ logger.add(os.path.join(log_dir, 'bill_database_{time:YYYY-MM-DD}.log'),
 )
 
 class BillDatabase:
-    def __init__(self, host=None, port=27017, db_name='bill_tracker'):
+    def __init__(self, host=None, port=27017, db_name=None):
         """
         初始化数据库连接
         
         :param host: MongoDB主机地址，默认为None，使用环境变量或容器内默认地址
         :param port: MongoDB端口
-        :param db_name: 数据库名称
+        :param db_name: 数据库名称，默认为None，优先使用环境变量MONGO_DB_NAME
         """
         try:
+            # 优先使用环境变量中的数据库名称
+            if db_name is None:
+                db_name = os.getenv('MONGO_DB_NAME', 'bill_tracker_test')
+            
             # 优先使用环境变量中的 MONGO_URI
             mongo_uri = os.getenv('MONGO_URI')
             
@@ -55,6 +59,7 @@ class BillDatabase:
                 else:
                     # 本地开发使用 localhost
                     host = host or 'localhost'
+                    port = 37017
                     self.client = pymongo.MongoClient(host, port)
             
             self.db = self.client[db_name]
@@ -63,6 +68,13 @@ class BillDatabase:
             # 创建索引以提高查询性能
             self.collection.create_index([('bill_date', pymongo.ASCENDING)])
             self.collection.create_index([('type', pymongo.ASCENDING)])
+            
+            # 检查数据库连接状态
+            try:
+                self.client.admin.command('ping')
+                logger.info(f"数据库连接成功: {db_name}")
+            except Exception as e:
+                logger.error(f"数据库连接测试失败: {e}")
             
             # 只在初始化时记录IP
             logger.info(f"成功连接到MongoDB数据库: {host}:{port}/{db_name}", extra={"ip": get_client_ip()})
@@ -78,10 +90,6 @@ class BillDatabase:
         :return: 插入结果
         """
         try:
-            # 打印详细的账单数据信息
-            print("插入账单数据详情:")
-            print("数据类型:", type(bill_data))
-            print("数据内容:", bill_data)
             
             # 验证必填字段
             required_fields = ['bill_date', 'type', 'category', 'amount']
@@ -103,8 +111,7 @@ class BillDatabase:
             except (ValueError, TypeError) as e:
                 raise ValueError(f"数据类型转换错误: {e}")
             
-            # 打印转换后的数据
-            print("转换后的数据:", bill_data)
+
             
             # 插入数据
             result = self.collection.insert_one(bill_data)
@@ -115,10 +122,7 @@ class BillDatabase:
             return result.inserted_id
         
         except Exception as e:
-            # 详细的错误日志
             logger.error(f"账单插入失败: {e}")
-            print(f"账单插入失败详细信息: {e}")
-            print("完整账单数据:", bill_data)
             raise
     
     def get_bills_by_year(self, year, page=1, page_size=10):
@@ -132,10 +136,14 @@ class BillDatabase:
         """
         try:
             # 构建年份查询条件
+            year_start = int(f"{year}0101")
+            year_end = int(f"{year}1231")
             query = {
-                'bill_date': {
-                    '$gte': f"{year}0101",
-                    '$lte': f"{year}1231"
+                '$expr': {
+                    '$and': [
+                        {'$gte': [{'$toInt': '$bill_date'}, year_start]},
+                        {'$lte': [{'$toInt': '$bill_date'}, year_end]}
+                    ]
                 }
             }
             
@@ -172,6 +180,7 @@ class BillDatabase:
         :return: 查询结果和总记录数
         """
         try:
+            
             # 计算跳过的记录数
             skip = (page - 1) * page_size
             
@@ -222,16 +231,18 @@ class BillDatabase:
         """
         try:
             # 构建年份查询条件
-            start_date = f"{year}0101"
-            end_date = f"{year}1231"
+            start_date_int = int(f"{year}0101")
+            end_date_int = int(f"{year}1231")
             
             # 聚合管道
             pipeline = [
                 {
                     '$match': {
-                        'bill_date': {
-                            '$gte': start_date,
-                            '$lte': end_date
+                        '$expr': {
+                            '$and': [
+                                {'$gte': [{'$toInt': '$bill_date'}, start_date_int]},
+                                {'$lte': [{'$toInt': '$bill_date'}, end_date_int]}
+                            ]
                         }
                     }
                 },
@@ -309,10 +320,18 @@ class BillDatabase:
             
             # 日期范围查询
             if start_date and end_date:
-                query['bill_date'] = {
-                    '$gte': str(start_date),  # 大于等于开始日期
-                    '$lte': str(end_date)     # 小于等于结束日期
+                # 确保日期参数为整数格式进行数值比较
+                start_date_int = int(start_date) if isinstance(start_date, str) else start_date
+                end_date_int = int(end_date) if isinstance(end_date, str) else end_date
+                
+                # 使用$expr进行数值比较，将字符串转换为整数
+                query['$expr'] = {
+                    '$and': [
+                        {'$gte': [{'$toInt': '$bill_date'}, start_date_int]},
+                        {'$lte': [{'$toInt': '$bill_date'}, end_date_int]}
+                    ]
                 }
+
             
             # 类型查询
             if bill_type:
@@ -403,12 +422,16 @@ class BillDatabase:
                 raise ValueError(f"不支持的周期类型: {period_type}")
             
             # 构建查询条件
+            start_date_int = int(start_datetime.strftime('%Y%m%d'))
+            end_date_int = int(end_datetime.strftime('%Y%m%d'))
             pipeline = [
                 {
                     '$match': {
-                        'bill_date': {
-                            '$gte': start_datetime.strftime('%Y%m%d'),
-                            '$lte': end_datetime.strftime('%Y%m%d')
+                        '$expr': {
+                            '$and': [
+                                {'$gte': [{'$toInt': '$bill_date'}, start_date_int]},
+                                {'$lte': [{'$toInt': '$bill_date'}, end_date_int]}
+                            ]
                         }
                     }
                 },
@@ -459,10 +482,17 @@ class BillDatabase:
         """
         try:
             # 构建聚合管道
+            year_start = int(f"{year}0101")
+            year_end = int(f"{year}1231")
             pipeline = [
                 # 匹配指定年份的账单
                 {'$match': {
-                    'bill_date': {'$regex': f'^{year}'},
+                    '$expr': {
+                        '$and': [
+                            {'$gte': [{'$toInt': '$bill_date'}, year_start]},
+                            {'$lte': [{'$toInt': '$bill_date'}, year_end]}
+                        ]
+                    }
                 }},
                 # 根据账单类型过滤
                 *([{'$match': {'amount': {'$gt': 0}}}] if bill_type == 'income' 
@@ -504,10 +534,17 @@ class BillDatabase:
         """
         try:
             # 构建聚合管道
+            year_start = int(f"{year}0101")
+            year_end = int(f"{year}1231")
             pipeline = [
                 # 匹配指定年份的账单
                 {'$match': {
-                    'bill_date': {'$regex': f'^{year}'}
+                    '$expr': {
+                        '$and': [
+                            {'$gte': [{'$toInt': '$bill_date'}, year_start]},
+                            {'$lte': [{'$toInt': '$bill_date'}, year_end]}
+                        ]
+                    }
                 }},
                 # 按月份分组并计算收入和支出
                 {'$group': {

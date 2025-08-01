@@ -11,6 +11,8 @@ services:
       - .:/app
     environment:
       - MONGO_URI=mongodb://mongo:27017/
+      # - MONGO_DB_NAME=bill_tracker_test
+      - MONGO_DB_NAME=bill_tracker
     depends_on:
       - mongo
     privileged: true

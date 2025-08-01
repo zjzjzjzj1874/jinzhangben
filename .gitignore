@@ -6,7 +6,12 @@ logs
 
 venv
 
+*.csv
+
 *.local.*
+
+# 环境变量配置文件
+.env
 
 # addUser.py
 
