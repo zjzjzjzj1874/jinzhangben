@@ -12,8 +12,8 @@ from user_manager import UserManager
 import csv
 import io
 from dotenv import load_dotenv
-from alipay_bill_processor import AlipayBillProcessor, AlipayBillClassifier
-from wechat_bill_processor import WechatBillProcessor, WechatBillClassifier
+from alipay_bill_processor import AlipayBillProcessor
+from wechat_bill_processor import WechatBillProcessor
 
 # 加载环境变量
 load_dotenv()

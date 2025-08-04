@@ -5,15 +5,15 @@ services:
     build: 
       context: .
       dockerfile: Dockerfile
-    image: bill-py-streamlit-web:v1.0.1
+    image: bill-py-streamlit-web:v1.1.0
     ports:
       - "8501:8501"
     volumes:
       - .:/app
     environment:
       - MONGO_URI=mongodb://mongo:27017/
-      - MONGO_DB_NAME=bill_tracker_test
-      # - MONGO_DB_NAME=bill_tracker
+      # - MONGO_DB_NAME=bill_tracker_test
+      - MONGO_DB_NAME=bill_tracker
     depends_on:
       - mongo
     privileged: true

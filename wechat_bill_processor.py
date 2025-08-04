@@ -1,64 +1,7 @@
 import pandas as pd
 from datetime import datetime
 from loguru import logger
-
-class WechatBillClassifier:
-    """微信账单分类器"""
-    
-    @staticmethod
-    def classify_wechat_bill(row):
-        """根据规则自动分类微信账单"""
-        product_name = str(row['商品'])
-        counterpart = str(row['交易对方'])
-        category_field = str(row['分类']) if pd.notna(row['分类']) and row['分类'].strip() else ''
-        
-        # 如果Excel中已有分类，直接使用
-        if category_field:
-            return category_field
-        
-        # 交易对方名称映射表
-        counterpart_mapping = {
-            '快剪': '美妆',
-            '深圳市微泊云科技有限公司': '停车费',
-            '华敏物业': '停车费',
-            '闪动体育科技': '羽毛球',
-            '壳牌': '小车加油',
-            'Coriander. 京新海球馆 店长': '羽毛球教学场地',
-            '滴滴出行': '交通',
-            '哈啰出行': '交通',
-            '美团': '餐饮',
-            '饿了么': '餐饮',
-            '星巴克': '餐饮',
-            '肯德基': '餐饮',
-            '麦当劳': '餐饮',
-            '永辉超市': '日用品',
-            '沃尔玛': '日用品',
-            '家乐福': '日用品'
-        }
-        
-        # 按交易对方分类
-        for company, category in counterpart_mapping.items():
-            if company in counterpart:
-                return category
-        
-        # 商品名称关键词映射表
-        product_keyword_mapping = {
-            '交通': ['地铁', '公交', '打车', '出租车', '网约车', '共享单车'],
-            '餐饮': ['外卖', '咖啡', '奶茶', '零食', '小吃', '餐厅', '饭店', '食堂', '快餐', '餐饮店'],
-            '日用品': ['超市', '便利店', '购物', '日用', '生活用品'],
-            '服饰': ['衣服', '鞋子', '包包', '配饰'],
-            '运动健身': ['健身', '游泳', '运动', '球类'],
-            '羽毛球': ['羽毛球', '羽毛球馆'],
-            '停车费': ['停车缴费'],
-        }
-        
-        # 按商品名称分类
-        for category, keywords in product_keyword_mapping.items():
-            if any(keyword in product_name for keyword in keywords):
-                return category
-        
-        # 无法分类
-        return None
+from bill_classifier import UniversalBillClassifier
 
 class WechatBillProcessor:
     """微信账单处理器"""
@@ -69,7 +12,7 @@ class WechatBillProcessor:
     
     def classify_wechat_bill(self, row):
         """分类微信账单"""
-        return WechatBillClassifier.classify_wechat_bill(row)
+        return UniversalBillClassifier.classify_wechat_bill(row)
     
     def process_wechat_bills(self, df, auto_classify=True, include_raw_data=False):
         """处理微信账单数据"""

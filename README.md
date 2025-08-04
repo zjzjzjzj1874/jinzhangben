@@ -335,6 +335,7 @@ jinzhangben/
 ├── database.py                 # 数据库交互
 ├── user_manager.py             # 用户管理
 │
+├── bill_classifier.py          # 通用账单分类器
 ├── alipay_bill_processor.py    # 支付宝账单处理器
 ├── wechat_bill_processor.py    # 微信账单处理器
 ├── import_alipay_bills.py      # 支付宝账单导入脚本

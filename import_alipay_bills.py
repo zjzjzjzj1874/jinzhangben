@@ -20,7 +20,7 @@ from datetime import datetime
 from database import BillDatabase
 from loguru import logger
 from dotenv import load_dotenv
-from alipay_bill_processor import AlipayBillProcessor, AlipayBillClassifier
+from alipay_bill_processor import AlipayBillProcessor
 
 # 加载环境变量
 load_dotenv()
