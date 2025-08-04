@@ -13,6 +13,7 @@ import csv
 import io
 from dotenv import load_dotenv
 from alipay_bill_processor import AlipayBillProcessor, AlipayBillClassifier
+from wechat_bill_processor import WechatBillProcessor, WechatBillClassifier
 
 # 加载环境变量
 load_dotenv()
@@ -38,7 +39,7 @@ logger.add(os.path.join(log_dir, 'bill_app_{time:YYYY-MM-DD}.log'),
            rotation='1 day',  # 按天切割
            retention='7 days',  # 保留最近7天的日志
            level='INFO',  # 日志级别
-           format="{time} | {level} | IP: {extra[ip]} | {message}"  # 自定义日志格式
+           format="{time} | {level} | {message}"  # 自定义日志格式
 )
 
 class BillTrackerApp:
@@ -48,6 +49,7 @@ class BillTrackerApp:
             self.db = BillDatabase()
             self.user_manager = UserManager()
             self.alipay_processor = AlipayBillProcessor(self.db)
+            self.wechat_processor = WechatBillProcessor(self.db)
             st.set_page_config(page_title='金账本', page_icon='💰')
             
             # 自定义侧边栏样式
@@ -139,6 +141,7 @@ class BillTrackerApp:
             [
                 '账单录入', 
                 '支付宝账单导入',
+                '微信账单导入',
                 '财务看板', 
                 '账单统计', 
                 '账单查询', 
@@ -152,6 +155,8 @@ class BillTrackerApp:
             self.record_bill_page()
         elif menu == '支付宝账单导入':
             self.alipay_import_page()
+        elif menu == '微信账单导入':
+            self.wechat_import_page()
         elif menu == '财务看板':
             self.dashboard_page()
         elif menu == '账单统计':
@@ -755,6 +760,128 @@ class BillTrackerApp:
             except Exception as e:
                 st.error(f"文件处理失败：{str(e)}")
                 logger.error(f"支付宝账单导入失败: {e}")
+    
+    def wechat_import_page(self):
+        """微信账单导入页面"""
+        st.header('微信账单导入')
+        
+        # 使用说明
+        with st.expander('📋 使用说明'):
+            st.markdown("""
+            **微信账单导入功能说明：**
+            
+            1. **文件格式要求：**
+               - 支持Excel格式的微信账单文件(.xlsx)
+               - 必须包含：交易时间、交易对方、商品、收/支、金额(元)、分类字段
+            
+            2. **自动分类规则：**
+               - 滴滴出行、地铁、公交 → 交通
+               - 美团外卖、饿了么、餐厅 → 餐饮
+               - 超市、便利店、商场 → 日用品
+               - 电影院、KTV、游戏 → 娱乐
+            
+            3. **注意事项：**
+               - 支持收入和支出两种类型
+               - 无法自动分类的订单会单独列出供确认
+               - 导入前请确保数据格式正确
+            """)
+        
+        # 文件上传
+        uploaded_file = st.file_uploader(
+            "选择微信账单Excel文件", 
+            type=['xlsx'],
+            help="请上传微信导出的Excel格式账单文件"
+        )
+        
+        if uploaded_file is not None:
+            try:
+                # 读取Excel文件
+                df = pd.read_excel(uploaded_file)
+                
+                # 验证文件格式
+                required_columns = ['交易时间', '交易对方', '商品', '收/支', '金额(元)', '分类']
+                if not all(col in df.columns for col in required_columns):
+                    st.error(f"文件格式不正确！需要包含以下列：{', '.join(required_columns)}")
+                    return
+                
+                # 显示预览
+                st.subheader('📊 文件预览')
+                st.dataframe(df.head(10))
+                st.info(f"共发现 {len(df)} 条账单记录")
+                
+                # 处理和分类账单
+                processed_bills, unclassified_bills = self.wechat_processor.process_wechat_bills(df, include_raw_data=True)
+                
+                # 显示分类结果
+                if processed_bills:
+                    st.subheader('✅ 可自动分类的账单')
+                    st.info(f"共 {len(processed_bills)} 条可自动导入")
+                    
+                    # 显示分类统计
+                    category_stats = {}
+                    income_count = 0
+                    expense_count = 0
+                    for bill in processed_bills:
+                        category = bill['category']
+                        category_stats[category] = category_stats.get(category, 0) + 1
+                        if bill['transaction_type'] == 'income':
+                            income_count += 1
+                        else:
+                            expense_count += 1
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.write("**分类统计：**")
+                        for category, count in category_stats.items():
+                            st.write(f"- {category}: {count} 条")
+                    
+                    with col2:
+                        total_amount = sum(bill['amount'] for bill in processed_bills)
+                        st.metric("总金额", f"¥{total_amount:.2f}")
+                    
+                    with col3:
+                        st.write("**交易类型：**")
+                        st.write(f"- 收入: {income_count} 条")
+                        st.write(f"- 支出: {expense_count} 条")
+                
+                # 显示无法分类的账单
+                if unclassified_bills:
+                    st.subheader('⚠️ 需要手动分类的账单')
+                    st.warning(f"共 {len(unclassified_bills)} 条需要手动确认分类")
+                    
+                    # 显示无法分类的账单详情
+                    unclassified_df = pd.DataFrame([
+                        {
+                            '交易时间': bill['raw_data']['交易时间'],
+                            '交易对方': bill['raw_data']['交易对方'],
+                            '商品': bill['raw_data']['商品'],
+                            '收/支': bill['raw_data']['收/支'],
+                            '金额': bill['raw_data']['金额(元)']
+                        } for bill in unclassified_bills
+                    ])
+                    st.dataframe(unclassified_df)
+                
+                # 导入按钮
+                if processed_bills:
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        if st.button('🚀 导入可分类账单', type='primary'):
+                            success_count = self.wechat_processor.import_bills_to_database(processed_bills)
+                            if success_count > 0:
+                                st.success(f"✅ 成功导入 {success_count} 条账单！")
+                                st.balloons()
+                            else:
+                                st.error("导入失败，请检查数据格式")
+                    
+                    with col2:
+                        if unclassified_bills and st.button('📝 处理未分类账单'):
+                            st.info("未分类账单处理功能开发中...")
+                            # TODO: 实现手动分类功能
+                
+            except Exception as e:
+                st.error(f"文件处理失败：{str(e)}")
+                logger.error(f"微信账单导入失败: {e}")
     
 
 

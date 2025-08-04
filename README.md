@@ -51,6 +51,18 @@ This is a personal finance management application built with Streamlit and Mongo
 ![账单总览](./static/bill_overview.png)
 </details>
 
+<details>
+<summary>支付宝账单导入</summary>
+
+![支付宝账单导入](./static/alipay_import.png)
+</details>
+
+<details>
+<summary>微信账单导入</summary>
+
+![微信账单导入](./static/wechat_import.png)
+</details>
+
 ## 技术栈 (Tech Stack)
 
 - **前端框架**: Streamlit
@@ -207,24 +219,38 @@ docker-compose down
 
 ### 4. 支付宝账单导入 (Alipay Bill Import)
 - 支持CSV格式的支付宝账单文件导入
-- 智能自动分类功能
-- 批量导入账单数据
+- 智能自动分类功能，基于交易对方和商品名称
+- 批量导入账单数据，提高录入效率
+- 支持Web界面和命令行两种导入方式
+- 数据预览功能，导入前可查看和确认
 - 支持手动处理未分类账单
 
-### 5. 财务分析 (Financial Analysis)
+### 5. 微信账单导入 (WeChat Bill Import)
+- 支持Excel格式的微信账单文件导入
+- 智能自动分类功能，基于交易对方和商品描述
+- 支持收入和支出两种类型的账单
+- 批量导入账单数据，提高录入效率
+- 支持Web界面和命令行两种导入方式
+- 数据预览功能，导入前可查看分类结果
+- 支持手动处理未分类账单
+- 预览模式，可在不导入数据库的情况下查看处理结果
+
+### 6. 财务分析 (Financial Analysis)
 - 周、月、季度、年度财务总结
 - 收支图表可视化
 - 详细的财务指标展示
 
-## 支付宝账单导入使用指南 (Alipay Import Guide)
+## 账单导入使用指南 (Bill Import Guide)
 
-### Web界面导入
+### 支付宝账单导入 (Alipay Import)
+
+#### Web界面导入
 1. 登录应用后，在侧边栏选择「支付宝账单导入」
 2. 上传支付宝导出的CSV格式账单文件
 3. 系统会自动预览和分类账单
 4. 确认后点击导入按钮
 
-### 命令行导入
+#### 命令行导入
 ```bash
 # 将支付宝账单CSV文件放在 csv/ali/ 目录下
 mkdir -p csv/ali
@@ -237,7 +263,7 @@ python import_alipay_bills.py
 python import_alipay_bills.py your-alipay-bill.csv
 ```
 
-### 支持的文件格式
+#### 支持的文件格式
 支付宝账单CSV文件必须包含以下列：
 - `创建时间`: 交易时间
 - `商品名称`: 交易描述
@@ -245,10 +271,50 @@ python import_alipay_bills.py your-alipay-bill.csv
 - `对方名称`: 交易对方
 - `分类`: 交易分类（可选）
 
-### 自动分类规则
+#### 自动分类规则
 - **交通**: 成都地铁运营有限公司
 - **餐饮**: 四川乡村基餐饮有限公司、包含"外卖订单"、"咖啡"、"奶茶"、"零食"、"小吃"
 - **日用品**: 包含"店内购物"、"满彭菜场"、"集刻便利店"
+- 其他无法自动分类的账单会单独列出供手动确认
+
+### 微信账单导入 (WeChat Import)
+
+#### Web界面导入
+1. 登录应用后，在侧边栏选择「微信账单导入」
+2. 上传微信导出的Excel格式账单文件
+3. 系统会自动预览和分类账单
+4. 确认后点击导入按钮
+
+#### 命令行导入
+```bash
+# 将微信账单Excel文件放在 csv/tencent/ 目录下
+mkdir -p csv/tencent
+cp your-wechat-bill.xlsx csv/tencent/
+
+# 导入微信账单
+python import_wechat_bills.py csv/tencent/your-wechat-bill.xlsx
+
+# 预览模式（不导入数据库）
+python import_wechat_bills.py csv/tencent/your-wechat-bill.xlsx --preview
+```
+
+#### 支持的文件格式
+微信账单Excel文件必须包含以下列：
+- `交易时间`: 交易时间
+- `交易对方`: 交易对方
+- `商品`: 交易描述
+- `收/支`: 收入或支出类型
+- `金额(元)`: 交易金额
+- `分类`: 交易分类（可选）
+
+#### 自动分类规则
+- **交通**: 滴滴出行、哈啰出行、地铁、公交相关
+- **餐饮**: 美团、饿了么、星巴克、肯德基、麦当劳等
+- **日用品**: 永辉超市、沃尔玛、家乐福等
+- **停车费**: 深圳市微泊云科技有限公司、华敏物业等
+- **羽毛球**: 闪动体育科技、球馆相关
+- **小车加油**: 壳牌等加油站
+- **美妆**: 快剪等美容服务
 - 其他无法自动分类的账单会单独列出供手动确认
 
 ## 配置 (Configuration)
@@ -265,15 +331,28 @@ python import_alipay_bills.py your-alipay-bill.csv
 ```
 jinzhangben/
 │
-├── app.py             # Streamlit 主应用
-├── database.py        # 数据库交互
-├── user_manager.py    # 用户管理
+├── app.py                      # Streamlit 主应用
+├── database.py                 # 数据库交互
+├── user_manager.py             # 用户管理
 │
-├── Dockerfile         # Docker 构建配置
-├── docker-compose.yml # 服务编排
-├── requirements.txt   # Python 依赖
+├── alipay_bill_processor.py    # 支付宝账单处理器
+├── wechat_bill_processor.py    # 微信账单处理器
+├── import_alipay_bills.py      # 支付宝账单导入脚本
+├── import_wechat_bills.py      # 微信账单导入脚本
 │
-└── README.md          # 项目文档
+├── csv/                        # 账单文件目录
+│   ├── ali/                    # 支付宝账单文件
+│   └── tencent/                # 微信账单文件
+│
+├── logs/                       # 日志文件目录
+├── static/                     # 静态资源文件
+│
+├── Dockerfile                  # Docker 构建配置
+├── docker-compose.yml          # 服务编排
+├── requirements.txt            # Python 依赖
+├── .env.example                # 环境变量示例
+│
+└── README.md                   # 项目文档
 ```
 
 ## 安全性 (Security)
