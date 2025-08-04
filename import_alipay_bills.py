@@ -20,6 +20,7 @@ from datetime import datetime
 from database import BillDatabase
 from loguru import logger
 from dotenv import load_dotenv
+from alipay_bill_processor import AlipayBillProcessor, AlipayBillClassifier
 
 # 加载环境变量
 load_dotenv()
@@ -28,6 +29,7 @@ class AlipayBillImporter:
     def __init__(self):
         """初始化导入器"""
         self.db = BillDatabase()
+        self.processor = AlipayBillProcessor(self.db)
         
         # 配置日志
         log_dir = os.path.join(os.path.dirname(__file__), 'logs')
@@ -39,89 +41,6 @@ class AlipayBillImporter:
             level='INFO',
             format="{time} | {level} | {message}"
         )
-    
-    def classify_alipay_bill(self, row):
-        """根据规则自动分类支付宝账单"""
-        product_name = str(row['商品名称'])
-        counterpart = str(row['对方名称'])
-        category_field = str(row['分类']) if pd.notna(row['分类']) and row['分类'].strip() else ''
-        
-        # 如果CSV中已有分类，直接使用
-        if category_field:
-            return category_field
-        
-        # 按对方名称分类
-        if '成都地铁运营有限公司' in counterpart:
-            return '交通'
-        elif '四川乡村基餐饮有限公司' in counterpart:
-            return '餐饮'
-        
-        # 按商品名称分类
-        if any(keyword in product_name for keyword in ['羽毛球', '羽毛球馆']):
-            return '羽毛球'
-        elif any(keyword in product_name for keyword in ['哈啰单车', '哈啰']):
-            return '交通'
-        elif any(keyword in product_name for keyword in ['外卖订单', '咖啡', '奶茶', '零食', '小吃']):
-            return '餐饮'
-        elif any(keyword in product_name for keyword in ['店内购物', '满彭菜场', '集刻便利店']):
-            return '日用品'
-        
-        # 无法分类
-        return None
-    
-    def process_alipay_bills(self, df):
-        """处理支付宝账单数据，进行自动分类"""
-        processed_bills = []
-        unclassified_bills = []
-        
-        for _, row in df.iterrows():
-            try:
-                # 解析时间格式
-                create_time = pd.to_datetime(row['创建时间'])
-                bill_date = create_time.strftime('%Y%m%d')
-                
-                # 基本账单信息
-                bill_data = {
-                    'bill_date': bill_date,
-                    'type': '支出',
-                    'amount': -float(row['订单金额(元)']),  # 支出为负数
-                    'remark': str(row['商品名称']),
-                    'create_time': datetime.now()
-                }
-                
-                # 自动分类逻辑
-                category = self.classify_alipay_bill(row)
-                
-                if category:
-                    bill_data['category'] = category
-                    processed_bills.append(bill_data)
-                else:
-                    unclassified_bills.append({
-                        'bill_data': bill_data,
-                        'raw_data': row.to_dict()
-                    })
-                    
-            except Exception as e:
-                logger.error(f"处理账单行失败: {e}, 数据: {row.to_dict()}")
-                continue
-        
-        return processed_bills, unclassified_bills
-    
-    def import_bills_to_database(self, bills):
-        """批量导入账单到数据库"""
-        success_count = 0
-        failed_count = 0
-        
-        for bill in bills:
-            try:
-                self.db.insert_bill(bill)
-                success_count += 1
-            except Exception as e:
-                logger.error(f"导入单条账单失败: {e}, 账单数据: {bill}")
-                failed_count += 1
-                continue
-        
-        return success_count, failed_count
     
     def import_from_file(self, file_path):
         """从文件导入支付宝账单"""
@@ -147,7 +66,7 @@ class AlipayBillImporter:
             print(f"📊 文件验证通过，共发现 {len(df)} 条账单记录")
             
             # 处理和分类账单
-            processed_bills, unclassified_bills = self.process_alipay_bills(df)
+            processed_bills, unclassified_bills = self.processor.process_alipay_bills(df)
             
             # 显示分类结果
             print(f"\n📈 分类结果：")
@@ -186,7 +105,7 @@ class AlipayBillImporter:
                     choice = input(f"\n🤔 是否导入 {len(processed_bills)} 条可分类账单到数据库？(y/n): ").lower().strip()
                     if choice in ['y', 'yes', '是']:
                         print("\n🚀 开始导入账单...")
-                        success_count, failed_count = self.import_bills_to_database(processed_bills)
+                        success_count, failed_count = self.processor.import_bills_to_database(processed_bills, return_failed_count=True)
                         
                         print(f"\n📊 导入结果：")
                         print(f"✅ 成功导入：{success_count} 条")

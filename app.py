@@ -12,6 +12,7 @@ from user_manager import UserManager
 import csv
 import io
 from dotenv import load_dotenv
+from alipay_bill_processor import AlipayBillProcessor, AlipayBillClassifier
 
 # 加载环境变量
 load_dotenv()
@@ -46,6 +47,7 @@ class BillTrackerApp:
         try:
             self.db = BillDatabase()
             self.user_manager = UserManager()
+            self.alipay_processor = AlipayBillProcessor(self.db)
             st.set_page_config(page_title='金账本', page_icon='💰')
             
             # 自定义侧边栏样式
@@ -693,7 +695,7 @@ class BillTrackerApp:
                 st.info(f"共发现 {len(df)} 条账单记录")
                 
                 # 处理和分类账单
-                processed_bills, unclassified_bills = self.process_alipay_bills(df)
+                processed_bills, unclassified_bills = self.alipay_processor.process_alipay_bills(df, include_raw_data=True)
                 
                 # 显示分类结果
                 if processed_bills:
@@ -738,7 +740,7 @@ class BillTrackerApp:
                     
                     with col1:
                         if st.button('🚀 导入可分类账单', type='primary'):
-                            success_count = self.import_bills_to_database(processed_bills)
+                            success_count = self.alipay_processor.import_bills_to_database(processed_bills)
                             if success_count > 0:
                                 st.success(f"✅ 成功导入 {success_count} 条账单！")
                                 st.balloons()
@@ -754,82 +756,7 @@ class BillTrackerApp:
                 st.error(f"文件处理失败：{str(e)}")
                 logger.error(f"支付宝账单导入失败: {e}")
     
-    def process_alipay_bills(self, df):
-        """处理支付宝账单数据，进行自动分类"""
-        processed_bills = []
-        unclassified_bills = []
-        
-        for _, row in df.iterrows():
-            try:
-                # 解析时间格式
-                create_time = pd.to_datetime(row['创建时间'])
-                bill_date = create_time.strftime('%Y%m%d')
-                
-                # 基本账单信息
-                bill_data = {
-                    'bill_date': bill_date,
-                    'type': '支出',
-                    'amount': -float(row['订单金额(元)']),  # 支出为负数
-                    'remark': str(row['商品名称']),
-                    'create_time': datetime.now(),
-                    'raw_data': row.to_dict()
-                }
-                
-                # 自动分类逻辑
-                category = self.classify_alipay_bill(row)
-                
-                if category:
-                    bill_data['category'] = category
-                    processed_bills.append(bill_data)
-                else:
-                    unclassified_bills.append(bill_data)
-                    
-            except Exception as e:
-                logger.error(f"处理账单行失败: {e}, 数据: {row.to_dict()}")
-                continue
-        
-        return processed_bills, unclassified_bills
-    
-    def classify_alipay_bill(self, row):
-        """根据规则自动分类支付宝账单"""
-        product_name = str(row['商品名称'])
-        counterpart = str(row['对方名称'])
-        category_field = str(row['分类']) if pd.notna(row['分类']) and row['分类'].strip() else ''
-        
-        # 如果CSV中已有分类，直接使用
-        if category_field:
-            return category_field
-        
-        # 按对方名称分类
-        if '成都地铁运营有限公司' in counterpart:
-            return '交通'
-        elif '四川乡村基餐饮有限公司' in counterpart:
-            return '餐饮'
-        
-        # 按商品名称分类
-        if any(keyword in product_name for keyword in ['外卖订单', '咖啡', '奶茶', '零食', '小吃']):
-            return '餐饮'
-        elif any(keyword in product_name for keyword in ['店内购物', '满彭菜场', '集刻便利店']):
-            return '日用品'
-        
-        # 无法分类
-        return None
-    
-    def import_bills_to_database(self, bills):
-        """批量导入账单到数据库"""
-        success_count = 0
-        
-        for bill in bills:
-            try:
-                # 移除raw_data字段，避免存储到数据库
-                bill_to_insert = {k: v for k, v in bill.items() if k != 'raw_data'}
-                self.db.insert_bill(bill_to_insert)
-                success_count += 1
-            except Exception as e:
-                logger.error(f"导入单条账单失败: {e}, 账单数据: {bill}")
-                continue
-        
-        return success_count
+
 
 def main():
     try:
