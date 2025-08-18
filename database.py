@@ -40,8 +40,8 @@ class BillDatabase:
         try:
             # 优先使用环境变量中的数据库名称
             if db_name is None:
-                db_name = os.getenv('MONGO_DB_NAME', 'bill_tracker_test')
-            
+                db_name = os.getenv('MONGO_DB_NAME', 'bill_tracker')
+                # db_name = os.getenv('MONGO_DB_NAME', 'bill_tracker_test')
             # 优先使用环境变量中的 MONGO_URI
             mongo_uri = os.getenv('MONGO_URI')
             
