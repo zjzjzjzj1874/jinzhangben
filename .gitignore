@@ -2,6 +2,8 @@
 
 __pycache__
 
+data/
+
 logs
 
 venv

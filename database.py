@@ -585,6 +585,235 @@ class BillDatabase:
             logger.error(f"月度统计查询失败: {e}")
             return pd.DataFrame(columns=['month', 'income', 'expense'])
 
+    def get_data_hash(self):
+        """
+        获取数据的哈希值，用于检测数据变化
+        
+        :return: 数据哈希值
+        """
+        try:
+            import hashlib
+            
+            # 获取bill_tracker数据库的基本统计信息
+            target_db_name = 'bill_tracker'
+            db = self.client[target_db_name]
+            collections = db.list_collection_names()
+            
+            hash_data = []
+            for collection_name in collections:
+                collection = db[collection_name]
+                count = collection.count_documents({})
+                
+                # 获取最新和最旧记录的时间戳
+                latest = list(collection.find().sort('_id', -1).limit(1))
+                oldest = list(collection.find().sort('_id', 1).limit(1))
+                
+                latest_id = str(latest[0]['_id']) if latest else ''
+                oldest_id = str(oldest[0]['_id']) if oldest else ''
+                
+                hash_data.append(f"{collection_name}:{count}:{latest_id}:{oldest_id}")
+            
+            # 生成哈希值
+            hash_string = '|'.join(sorted(hash_data))
+            return hashlib.md5(hash_string.encode()).hexdigest()
+            
+        except Exception as e:
+            logger.error(f"获取数据哈希失败: {e}")
+            return None
+    
+    def cleanup_old_backups(self, backup_dir, max_backups=5):
+        """
+        清理旧的备份文件，只保留最新的几份
+        
+        :param backup_dir: 备份目录
+        :param max_backups: 最大保留备份数量
+        """
+        try:
+            import glob
+            import os
+            
+            # 获取所有备份文件
+            backup_pattern = os.path.join(backup_dir, 'bills_backup_*.json')
+            backup_files = glob.glob(backup_pattern)
+            
+            if len(backup_files) <= max_backups:
+                return
+            
+            # 按修改时间排序，最新的在前
+            backup_files.sort(key=os.path.getmtime, reverse=True)
+            
+            # 删除多余的备份文件
+            files_to_delete = backup_files[max_backups:]
+            for file_path in files_to_delete:
+                try:
+                    os.remove(file_path)
+                    logger.info(f"删除旧备份文件: {os.path.basename(file_path)}")
+                except Exception as e:
+                    logger.error(f"删除备份文件失败 {file_path}: {e}")
+                    
+        except Exception as e:
+            logger.error(f"清理备份文件失败: {e}")
+    
+    def check_backup_needed(self, backup_dir):
+        """
+        检查是否需要备份（基于数据变化）
+        
+        :param backup_dir: 备份目录
+        :return: (是否需要备份, 当前哈希值, 上次哈希值)
+        """
+        try:
+            import os
+            import json
+            import glob
+            
+            # 获取当前数据哈希
+            current_hash = self.get_data_hash()
+            if not current_hash:
+                return True, None, None  # 无法获取哈希时，默认需要备份
+            
+            # 查找最新的备份文件
+            backup_pattern = os.path.join(backup_dir, 'bills_backup_*.json')
+            backup_files = glob.glob(backup_pattern)
+            
+            if not backup_files:
+                return True, current_hash, None  # 没有备份文件，需要备份
+            
+            # 获取最新备份文件
+            latest_backup = max(backup_files, key=os.path.getmtime)
+            
+            try:
+                with open(latest_backup, 'r', encoding='utf-8') as f:
+                    backup_data = json.load(f)
+                    last_hash = backup_data.get('backup_info', {}).get('data_hash')
+                    
+                    if last_hash == current_hash:
+                        logger.info(f"数据未发生变化，跳过备份 (哈希: {current_hash})")
+                        return False, current_hash, last_hash
+                    else:
+                        logger.info(f"检测到数据变化，需要备份 (旧哈希: {last_hash}, 新哈希: {current_hash})")
+                        return True, current_hash, last_hash
+                        
+            except Exception as e:
+                logger.warning(f"读取上次备份信息失败: {e}，将进行备份")
+                return True, current_hash, None
+                
+        except Exception as e:
+            logger.error(f"检查备份需求失败: {e}")
+            return True, None, None  # 出错时默认需要备份
+
+    def backup_all_data(self, backup_path=None, force=False):
+        """
+        备份所有数据到JSON文件
+        
+        :param backup_path: 备份文件路径，如果为None则自动生成
+        :param force: 是否强制备份，忽略增量检测
+        :return: 备份结果字典
+        """
+        try:
+            import os
+            import json
+            from datetime import datetime
+            
+            # 确定备份目录
+            if backup_path:
+                backup_dir = os.path.dirname(backup_path)
+            else:
+                backup_dir = '/app/data'
+            
+            # 确保备份目录存在
+            os.makedirs(backup_dir, exist_ok=True)
+            
+            # 检查是否需要备份（除非强制备份）
+            if not force:
+                need_backup, current_hash, last_hash = self.check_backup_needed(backup_dir)
+                if not need_backup:
+                    return {
+                        'success': True,
+                        'message': '数据未发生变化，跳过备份',
+                        'skipped': True,
+                        'current_hash': current_hash,
+                        'last_hash': last_hash
+                    }
+            else:
+                current_hash = self.get_data_hash()
+            
+            # 生成备份文件名
+            if not backup_path:
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                backup_path = os.path.join(backup_dir, f'bills_backup_{timestamp}.json')
+            
+            # 只备份bill_tracker数据库
+            target_db_name = 'bill_tracker'
+            db = self.client[target_db_name]
+            collections = db.list_collection_names()
+            
+            backup_data = {
+                'backup_info': {
+                    'timestamp': datetime.now().strftime('%Y%m%d_%H%M%S'),
+                    'backup_time': datetime.now().isoformat(),
+                    'database_name': target_db_name,
+                    'version': '2.0',
+                    'data_hash': current_hash  # 添加数据哈希
+                },
+                'databases': {}
+            }
+            
+            total_records = 0
+            
+            # 备份指定数据库
+            db_data = {'collections': {}}
+            for collection_name in collections:
+                collection = db[collection_name]
+                documents = []
+                
+                for doc in collection.find():
+                    # 转换ObjectId为字符串
+                    if '_id' in doc:
+                        doc['_id'] = str(doc['_id'])
+                    documents.append(doc)
+                
+                db_data['collections'][collection_name] = {
+                    'count': len(documents),
+                    'documents': documents
+                }
+                total_records += len(documents)
+                logger.info(f"备份集合 {target_db_name}.{collection_name}: {len(documents)} 条记录")
+            
+            backup_data['databases'][target_db_name] = db_data
+            
+            # 写入备份文件
+            with open(backup_path, 'w', encoding='utf-8') as f:
+                json.dump(backup_data, f, ensure_ascii=False, indent=2, default=str)
+            
+            # 获取文件大小
+            file_size = os.path.getsize(backup_path)
+            file_size_mb = file_size / (1024 * 1024)
+            
+            # 清理旧备份文件
+            self.cleanup_old_backups(backup_dir, max_backups=5)
+            
+            logger.info(f"数据备份完成: {backup_path}, 共{total_records}条记录, 文件大小: {file_size_mb:.2f}MB")
+            
+            return {
+                'success': True,
+                'message': f'备份完成: {os.path.basename(backup_path)}',
+                'backup_path': backup_path,
+                'total_databases': 1,
+                'total_documents': total_records,
+                'file_size': file_size,
+                'file_size_mb': round(file_size_mb, 2),
+                'data_hash': current_hash,
+                'skipped': False
+            }
+            
+        except Exception as e:
+            logger.error(f"数据备份失败: {e}")
+            return {
+                'success': False,
+                'message': f'备份失败: {str(e)}',
+                'error': str(e)
+            }
+
     def close(self):
         """
         关闭数据库连接

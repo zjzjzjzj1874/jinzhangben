@@ -145,7 +145,8 @@ class BillTrackerApp:
                 '财务看板', 
                 '账单统计', 
                 '账单查询', 
-                '年度总览'
+                '年度总览',
+                '数据备份'
             ]
         )
         
@@ -165,6 +166,8 @@ class BillTrackerApp:
             self.query_bills_page()
         elif menu == '年度总览':
             self.annual_overview_page()
+        elif menu == '数据备份':
+            self.data_backup_page()
         
         st.sidebar.text(f'欢迎，{st.session_state.username}')
         if st.sidebar.button('退出登录'):
@@ -883,6 +886,230 @@ class BillTrackerApp:
                 st.error(f"文件处理失败：{str(e)}")
                 logger.error(f"微信账单导入失败: {e}")
     
+    def data_backup_page(self):
+        """数据备份页面"""
+        st.header('📦 数据备份')
+        
+        st.markdown("""
+        ### 功能说明
+        - 智能备份bill_tracker数据库中的数据到JSON文件
+        - 只有数据发生变化时才会创建新备份（增量检测）
+        - 自动保留最新的5份备份文件，删除旧备份
+        - 备份文件保存在data目录下，带有时间戳
+        - 可以用于数据迁移和恢复
+        """)
+        
+        # 显示当前数据库状态
+        try:
+            # 只显示bill_tracker数据库的统计信息
+            target_db_name = 'bill_tracker'
+            
+            st.subheader('📊 当前数据库状态')
+            
+            total_documents = 0
+            db = self.db.client[target_db_name]
+            collections = db.list_collection_names()
+            
+            with st.expander(f"数据库: {target_db_name}", expanded=True):
+                for collection_name in collections:
+                    collection = db[collection_name]
+                    count = collection.count_documents({})
+                    total_documents += count
+                    st.write(f"📄 {collection_name}: {count:,} 条记录")
+            
+            st.metric("总记录数", f"{total_documents:,}")
+            
+        except Exception as e:
+            st.error(f"获取数据库状态失败: {e}")
+        
+        st.divider()
+        
+        # 备份操作
+        st.subheader('🔄 执行备份')
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            st.info("点击下方按钮开始智能备份bill_tracker数据库（仅在数据变化时备份）")
+        
+        with col2:
+            col2_1, col2_2 = st.columns(2)
+            
+            with col2_1:
+                if st.button('🚀 智能备份', type='primary'):
+                    try:
+                        with st.spinner('正在检查数据变化并备份...'):
+                            # 执行智能备份
+                            backup_result = self.db.backup_all_data(force=False)
+                            
+                            if backup_result.get('skipped', False):
+                                st.info('ℹ️ 数据未发生变化，跳过备份')
+                                st.write(f"当前数据哈希: `{backup_result.get('current_hash', 'N/A')}`")
+                            else:
+                                st.success('✅ 备份完成！')
+                                
+                                # 显示备份信息
+                                st.subheader('📋 备份详情')
+                                
+                                col1, col2, col3 = st.columns(3)
+                                
+                                with col1:
+                                    st.metric("备份数据库数", backup_result.get('total_databases', 1))
+                                
+                                with col2:
+                                    st.metric("备份记录数", f"{backup_result.get('total_documents', 0):,}")
+                                
+                                with col3:
+                                    st.metric("文件大小", f"{backup_result.get('file_size_mb', 0)} MB")
+                                
+                                st.info(f"📁 备份文件: `{os.path.basename(backup_result.get('backup_path', ''))}`")
+                                st.info(f"🔍 数据哈希: `{backup_result.get('data_hash', 'N/A')}`")
+                                
+                                # 提供下载链接
+                                try:
+                                    backup_path = backup_result.get('backup_path')
+                                    if backup_path and os.path.exists(backup_path):
+                                        with open(backup_path, 'rb') as f:
+                                            st.download_button(
+                                                label="📥 下载备份文件",
+                                                data=f.read(),
+                                                file_name=os.path.basename(backup_path),
+                                                mime="application/json"
+                                            )
+                                except Exception as download_error:
+                                    st.warning(f"无法提供下载链接: {download_error}")
+                            
+                    except Exception as e:
+                        st.error(f"备份失败: {e}")
+                        logger.error(f"智能备份失败: {e}")
+            
+            with col2_2:
+                if st.button('🔄 强制备份', help="忽略数据变化检测，强制创建备份"):
+                    try:
+                        with st.spinner('正在强制备份数据...'):
+                            # 执行强制备份
+                            backup_result = self.db.backup_all_data(force=True)
+                            
+                            st.success('✅ 强制备份完成！')
+                            
+                            # 显示备份信息
+                            st.subheader('📋 备份详情')
+                            
+                            col1, col2, col3 = st.columns(3)
+                            
+                            with col1:
+                                st.metric("备份数据库数", backup_result.get('total_databases', 1))
+                            
+                            with col2:
+                                st.metric("备份记录数", f"{backup_result.get('total_documents', 0):,}")
+                            
+                            with col3:
+                                st.metric("文件大小", f"{backup_result.get('file_size_mb', 0)} MB")
+                            
+                            st.info(f"📁 备份文件: `{os.path.basename(backup_result.get('backup_path', ''))}`")
+                            st.info(f"🔍 数据哈希: `{backup_result.get('data_hash', 'N/A')}`")
+                            
+                            # 提供下载链接
+                            try:
+                                backup_path = backup_result.get('backup_path')
+                                if backup_path and os.path.exists(backup_path):
+                                    with open(backup_path, 'rb') as f:
+                                        st.download_button(
+                                            label="📥 下载备份文件",
+                                            data=f.read(),
+                                            file_name=os.path.basename(backup_path),
+                                            mime="application/json"
+                                        )
+                            except Exception as download_error:
+                                st.warning(f"无法提供下载链接: {download_error}")
+                            
+                    except Exception as e:
+                        st.error(f"强制备份失败: {e}")
+                        logger.error(f"强制备份失败: {e}")
+        
+        st.divider()
+        
+        # 显示历史备份文件
+        st.subheader('📚 历史备份文件 (最多显示5个)')
+        
+        try:
+            import os
+            import glob
+            from datetime import datetime
+            
+            data_dir = '/app/data'  # 使用容器内的路径
+            if os.path.exists(data_dir):
+                backup_files = glob.glob(os.path.join(data_dir, 'bills_backup_*.json'))
+                backup_files.sort(key=os.path.getmtime, reverse=True)  # 按修改时间倒序
+                
+                if backup_files:
+                    st.write(f"共找到 {len(backup_files)} 个备份文件")
+                    
+                    # 显示表头
+                    col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+                    with col1:
+                        st.write("**文件名**")
+                    with col2:
+                        st.write("**大小**")
+                    with col3:
+                        st.write("**创建时间**")
+                    with col4:
+                        st.write("**操作**")
+                    
+                    st.divider()
+                    
+                    for i, backup_file in enumerate(backup_files[:5]):  # 只显示最新5个
+                        file_name = os.path.basename(backup_file)
+                        file_size = os.path.getsize(backup_file)
+                        file_size_mb = file_size / (1024 * 1024)
+                        
+                        # 从文件名提取时间戳
+                        timestamp_str = file_name.replace('bills_backup_', '').replace('.json', '')
+                        try:
+                            timestamp = datetime.strptime(timestamp_str, '%Y%m%d_%H%M%S')
+                            time_str = timestamp.strftime('%Y-%m-%d %H:%M:%S')
+                        except:
+                            time_str = timestamp_str
+                        
+                        col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+                        
+                        with col1:
+                            # 标记最新的备份
+                            if i == 0:
+                                st.write(f"🆕 {file_name}")
+                            else:
+                                st.write(f"📄 {file_name}")
+                        
+                        with col2:
+                            st.write(f"{file_size_mb:.2f} MB")
+                        
+                        with col3:
+                            st.write(time_str)
+                        
+                        with col4:
+                            # 提供下载按钮
+                            try:
+                                with open(backup_file, 'rb') as f:
+                                    st.download_button(
+                                        label="📥",
+                                        data=f.read(),
+                                        file_name=file_name,
+                                        mime="application/json",
+                                        key=f"download_{i}",
+                                        help="下载此备份文件"
+                                    )
+                            except Exception as e:
+                                st.write("❌")
+                    
+                    if len(backup_files) > 5:
+                        st.info(f"还有 {len(backup_files) - 5} 个较旧的备份文件未显示")
+                else:
+                    st.info("暂无历史备份文件")
+            else:
+                st.info("备份目录不存在")
+                
+        except Exception as e:
+            st.warning(f"无法读取历史备份文件: {e}")
 
 
 def main():

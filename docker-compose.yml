@@ -10,6 +10,7 @@ services:
       - "8501:8501"
     volumes:
       - .:/app
+      - ./data:/app/data
     environment:
       - MONGO_URI=mongodb://mongo:27017/
       # - MONGO_DB_NAME=bill_tracker_test
@@ -23,17 +24,17 @@ services:
       - streamlit-net
 
   mongo:
-    image: mongo:latest
+    image: mongo:7.0
     ports:
       - "37017:27017"  # 将容器的27017端口映射到宿主机的37017端口
     volumes:
-      - mongo_data:/data/db
+      - mongo_data_new:/data/db
     restart: always
     networks:
       - streamlit-net  # 让mongo服务也加入到同一网络
 
 volumes:
-  mongo_data:
+  mongo_data_new:
 
 networks:
   streamlit-net:

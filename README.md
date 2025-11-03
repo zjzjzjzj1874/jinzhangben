@@ -153,6 +153,17 @@ cp .env.example .env
 streamlit run app.py
 ```
 
+7. 配置智能备份（可选）
+```bash
+# 设置定时备份任务（每天凌晨2点）
+crontab -e
+# 添加以下行：
+# 0 2 * * * cd /path/to/your/project && python scheduled_backup.py
+
+# 或手动运行备份
+python scheduled_backup.py
+```
+
 ### Docker 部署 (Docker Deployment)
 
 #### 前提条件
@@ -179,6 +190,12 @@ docker-compose logs web
 
 # 停止服务
 docker-compose down
+
+# 运行智能备份
+docker exec bill-py-streamlit-web-1 python /app/scheduled_backup.py
+
+# 进入容器查看备份文件
+docker exec -it bill-py-streamlit-web-1 ls -la /app/data/
 ```
 
 ## 主要功能 (Key Features)
@@ -240,6 +257,18 @@ docker-compose down
 - 收支图表可视化
 - 详细的财务指标展示
 
+### 7. 智能数据备份 (Smart Data Backup)
+- **增量备份**: 自动检测数据变化，只在数据发生变化时进行备份
+- **智能清理**: 自动保留最新的5个备份文件，删除过期备份
+- **双重备份模式**:
+  - 智能备份：检测数据变化，避免重复备份
+  - 强制备份：跳过检测，强制创建备份
+- **周期性备份**: 支持定时任务自动备份
+- **备份管理**: 
+  - 显示备份文件详细信息（大小、记录数、数据哈希值）
+  - 提供历史备份文件下载
+  - 备份文件完整性验证
+
 ## 账单导入使用指南 (Bill Import Guide)
 
 ### 支付宝账单导入 (Alipay Import)
@@ -276,6 +305,85 @@ python import_alipay_bills.py your-alipay-bill.csv
 - **餐饮**: 四川乡村基餐饮有限公司、包含"外卖订单"、"咖啡"、"奶茶"、"零食"、"小吃"
 - **日用品**: 包含"店内购物"、"满彭菜场"、"集刻便利店"
 - 其他无法自动分类的账单会单独列出供手动确认
+
+## 智能备份系统使用指南 (Smart Backup Guide)
+
+### 功能特点
+- **增量检测**: 通过数据哈希值检测数据变化，避免重复备份
+- **自动清理**: 保留最新5个备份文件，自动删除过期备份
+- **完整性验证**: 每个备份文件包含数据哈希值，确保数据完整性
+- **灵活备份**: 支持智能备份和强制备份两种模式
+
+### Web界面使用
+
+#### 智能备份
+1. 登录应用后，在侧边栏选择「数据备份」
+2. 点击「智能备份」按钮
+3. 系统会自动检测数据是否发生变化
+4. 如果数据有变化，创建新备份；如果无变化，跳过备份
+5. 备份完成后可查看备份详情和下载备份文件
+
+#### 强制备份
+1. 在数据备份页面点击「强制备份」按钮
+2. 系统会跳过数据变化检测，直接创建备份
+3. 适用于需要手动创建备份的场景
+
+#### 备份文件管理
+- 查看最新5个备份文件的详细信息
+- 每个备份文件显示：文件名、大小、创建时间、记录数
+- 点击下载按钮可下载对应的备份文件
+- 系统自动清理超过5个的旧备份文件
+
+### 命令行使用
+
+#### 周期性备份脚本
+```bash
+# 在Docker容器中运行智能备份
+docker exec bill-py-streamlit-web-1 python /app/scheduled_backup.py
+
+# 本地环境运行
+python scheduled_backup.py
+```
+
+#### 设置定时任务
+```bash
+# 编辑crontab
+crontab -e
+
+# 添加定时任务（每天凌晨2点执行备份）
+0 2 * * * docker exec bill-py-streamlit-web-1 python /app/scheduled_backup.py
+
+# 或者每6小时执行一次
+0 */6 * * * docker exec bill-py-streamlit-web-1 python /app/scheduled_backup.py
+```
+
+### 备份文件格式
+备份文件为JSON格式，包含以下信息：
+```json
+{
+  "backup_info": {
+    "backup_time": "2025-11-03 15:02:40",
+    "database_name": "bill_tracker",
+    "total_records": 2222,
+    "file_size": "0.70MB",
+    "data_hash": "6854f26add14a21b0c07775ec1b3e51d"
+  },
+  "databases": {
+    "bill_tracker": {
+      "bills": {
+        "count": 2222,
+        "data": [...]
+      }
+    }
+  }
+}
+```
+
+### 备份策略建议
+- **开发环境**: 每次重要数据变更后手动智能备份
+- **生产环境**: 设置每日自动备份（凌晨2点）
+- **重要操作前**: 使用强制备份创建安全点
+- **数据迁移**: 使用强制备份确保数据完整性
 
 ### 微信账单导入 (WeChat Import)
 
@@ -340,10 +448,14 @@ jinzhangben/
 ├── wechat_bill_processor.py    # 微信账单处理器
 ├── import_alipay_bills.py      # 支付宝账单导入脚本
 ├── import_wechat_bills.py      # 微信账单导入脚本
+├── scheduled_backup.py         # 周期性智能备份脚本
 │
 ├── csv/                        # 账单文件目录
 │   ├── ali/                    # 支付宝账单文件
 │   └── tencent/                # 微信账单文件
+│
+├── data/                       # 数据文件目录
+│   └── bills_backup_*.json     # 备份文件
 │
 ├── logs/                       # 日志文件目录
 ├── static/                     # 静态资源文件
