@@ -2,7 +2,7 @@
 Author: zjzjzjzj1874 zjzjzjzj1874@gmail.com
 Date: 2025-01-02 15:14:19
 LastEditors: zjzjzjzj1874 zjzjzjzj1874@gmail.com
-LastEditTime: 2025-07-20 18:16:38
+LastEditTime: 2025-11-04 20:05:38
 FilePath: /bill-py-streamlit/bill_types.py
 Description: 账单类型
 '''
@@ -26,6 +26,7 @@ class BillCategory:
         LIVING_EXPENSES = "生活缴费"
         CAR_MAINTENANCE = "小车维护"
         CAR_INSURANCE = "小车保险"
+        WELCOME_LITTLE_CORN = "迎接小玉米"
         CAR_GAS = "小车加油"
         PARKING = "停车费"
         TOLL = "过路费"

@@ -436,11 +436,22 @@ class BillTrackerApp:
                 if bill_category != '全部':
                     query_params['bill_category'] = bill_category
                 
-                if min_amount > 0:
-                    query_params['min_amount'] = min_amount
-                
-                if max_amount > 0:
-                    query_params['max_amount'] = max_amount
+                # 处理金额范围查询 - 根据账单类型调整
+                if min_amount > 0 or max_amount > 0:
+                    if bill_type == '支出':
+                        # 对于支出，用户输入的正数需要转换为负数范围
+                        # 例如：用户输入最小金额100（表示支出≥100），实际查询amount ≤ -100
+                        # 用户输入最大金额200（表示支出≤200），实际查询amount ≥ -200
+                        if min_amount > 0:
+                            query_params['max_amount'] = -min_amount  # 支出≥100 → amount ≤ -100
+                        if max_amount > 0:
+                            query_params['min_amount'] = -max_amount  # 支出≤200 → amount ≥ -200
+                    else:
+                        # 对于收入或全部，保持原有逻辑
+                        if min_amount > 0:
+                            query_params['min_amount'] = min_amount
+                        if max_amount > 0:
+                            query_params['max_amount'] = max_amount
                 
                 if remark:
                     query_params['remark'] = remark
