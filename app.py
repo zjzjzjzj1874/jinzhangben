@@ -411,10 +411,12 @@ class BillTrackerApp:
         with col2:
             end_date = st.date_input('结束日期', 
                 datetime.now(), key='query_end')
-            bill_category = st.selectbox('账单分类', 
-                ['全部'] + [category.value for category in BillCategory.Expense] + 
+            bill_categories = st.multiselect(
+                '账单分类（可多选）', 
+                [category.value for category in BillCategory.Expense] + 
                 [category.value for category in BillCategory.Income], 
-                key='query_category')
+                key='query_category'
+            )
         
         with col3:
             min_amount = st.number_input('最小金额', min_value=0.0, step=0.1, key='query_min')
@@ -433,8 +435,9 @@ class BillTrackerApp:
                 if bill_type != '全部':
                     query_params['bill_type'] = bill_type
                 
-                if bill_category != '全部':
-                    query_params['bill_category'] = bill_category
+                # 多分类：若选择了分类列表，则传递给后端
+                if bill_categories:
+                    query_params['bill_categories'] = bill_categories
                 
                 # 处理金额范围查询 - 根据账单类型调整
                 if min_amount > 0 or max_amount > 0:

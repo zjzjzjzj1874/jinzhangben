@@ -10,7 +10,7 @@
 使用方法：
 1. 直接运行: python scheduled_backup.py
 2. 作为cron任务: 0 2 * * * /usr/bin/python3 /path/to/scheduled_backup.py
-3. Docker环境: docker exec container_name python /app/scheduled_backup.py
+3. Docker环境: docker exec bill-py-streamlit-web-1 python /app/scheduled_backup.py
 """
 
 import os

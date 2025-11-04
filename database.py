@@ -299,6 +299,7 @@ class BillDatabase:
                   end_date=None, 
                   bill_type=None, 
                   bill_category=None, 
+                  bill_categories=None,
                   min_amount=None, 
                   max_amount=None, 
                   remark=None):
@@ -308,7 +309,8 @@ class BillDatabase:
         :param start_date: 开始日期 (格式: 20250102)
         :param end_date: 结束日期 (格式: 20250102)
         :param bill_type: 账单类型
-        :param bill_category: 账单分类
+        :param bill_category: 账单分类（单个，可选）
+        :param bill_categories: 账单分类列表（多个，可选；优先于bill_category）
         :param min_amount: 最小金额
         :param max_amount: 最大金额
         :param remark: 备注关键词
@@ -337,8 +339,14 @@ class BillDatabase:
             if bill_type:
                 query['type'] = bill_type
             
-            # 分类查询
-            if bill_category:
+            # 分类查询（支持多选）
+            if bill_categories:
+                # 传入多个分类时，使用$in进行匹配
+                # 仅接受非空字符串
+                valid_categories = [c for c in bill_categories if isinstance(c, str) and c.strip()]
+                if valid_categories:
+                    query['category'] = {'$in': valid_categories}
+            elif bill_category:
                 query['category'] = bill_category
             
             # 金额范围查询
