@@ -19,7 +19,7 @@ services:
       - mongo
     privileged: true
     restart: always
-    command: sh -c "streamlit run app.py"
+    command: sh -c "streamlit run app.py --server.address 0.0.0.0 --server.port 8501 --browser.gatherUsageStats=false"
     networks:
       - streamlit-net
 
