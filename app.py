@@ -740,39 +740,186 @@ class BillTrackerApp:
                         total_amount = sum(bill['amount'] for bill in processed_bills)
                         st.metric("总金额", f"¥{abs(total_amount):.2f}")
                 
-                # 显示无法分类的账单
+                # 显示无法分类的账单 - 直接集成分类功能
                 if unclassified_bills:
                     st.subheader('⚠️ 需要手动分类的账单')
                     st.warning(f"共 {len(unclassified_bills)} 条需要手动确认分类")
+                    st.info("💡 提示：可以从下拉框选择分类，也可以直接输入自定义分类")
                     
-                    # 显示无法分类的账单详情
-                    unclassified_df = pd.DataFrame([
-                        {
-                            '创建时间': bill['raw_data']['创建时间'],
-                            '商品名称': bill['raw_data']['商品名称'],
-                            '金额': bill['raw_data']['订单金额(元)'],
-                            '对方名称': bill['raw_data']['对方名称']
-                        } for bill in unclassified_bills
-                    ])
-                    st.dataframe(unclassified_df)
+                    # 获取所有可用的支出分类
+                    expense_categories = [cat.value for cat in BillCategory.Expense]
+                    
+                    # 初始化 session state
+                    if 'alipay_classifications' not in st.session_state:
+                        st.session_state.alipay_classifications = {}
+                    
+                    # 使用紧凑的表格布局
+                    # 创建表头
+                    header_cols = st.columns([0.4, 1.2, 1.8, 0.8, 1.8, 1.2, 1.2, 0.6])
+                    header_cols[0].markdown("**序号**")
+                    header_cols[1].markdown("**创建时间**")
+                    header_cols[2].markdown("**商品名称**")
+                    header_cols[3].markdown("**金额**")
+                    header_cols[4].markdown("**对方名称**")
+                    header_cols[5].markdown("**选择分类**")
+                    header_cols[6].markdown("**或输入分类**")
+                    header_cols[7].markdown("**状态**")
+                    
+                    # 添加表格样式
+                    st.markdown("""
+                    <style>
+                    .stSelectbox > div > div {
+                        padding: 0.25rem 0.5rem;
+                    }
+                    .stTextInput > div > div > input {
+                        padding: 0.25rem 0.5rem;
+                    }
+                    </style>
+                    """, unsafe_allow_html=True)
+                    
+                    # 为每条未分类账单创建一行（紧凑布局）
+                    for idx, bill in enumerate(unclassified_bills):
+                        cols = st.columns([0.4, 1.2, 1.8, 0.8, 1.8, 1.2, 1.2, 0.6])
+                        
+                        with cols[0]:
+                            st.markdown(f"<div style='padding: 0.5rem 0;'>{idx + 1}</div>", unsafe_allow_html=True)
+                        
+                        with cols[1]:
+                            st.markdown(f"<div style='padding: 0.5rem 0; font-size: 0.9rem;'>{bill['raw_data']['创建时间']}</div>", unsafe_allow_html=True)
+                        
+                        with cols[2]:
+                            st.markdown(f"<div style='padding: 0.5rem 0; font-size: 0.9rem;'>{bill['raw_data']['商品名称']}</div>", unsafe_allow_html=True)
+                        
+                        with cols[3]:
+                            st.markdown(f"<div style='padding: 0.5rem 0; font-size: 0.9rem;'>¥{bill['raw_data']['订单金额(元)']}</div>", unsafe_allow_html=True)
+                        
+                        with cols[4]:
+                            st.markdown(f"<div style='padding: 0.5rem 0; font-size: 0.9rem;'>{bill['raw_data']['对方名称']}</div>", unsafe_allow_html=True)
+                        
+                        with cols[5]:
+                            selected_category = st.selectbox(
+                                '选择',
+                                [''] + expense_categories,
+                                key=f"alipay_category_{idx}",
+                                label_visibility="collapsed"
+                            )
+                        
+                        with cols[6]:
+                            custom_category = st.text_input(
+                                '输入',
+                                value='',
+                                key=f"alipay_custom_{idx}",
+                                label_visibility="collapsed",
+                                placeholder="自定义"
+                            )
+                        
+                        with cols[7]:
+                            # 确定最终使用的分类（优先使用自定义）
+                            final_category = custom_category if custom_category else selected_category
+                            st.session_state.alipay_classifications[idx] = {
+                                'bill': bill,
+                                'category': final_category
+                            }
+                            
+                            # 状态指示
+                            if final_category:
+                                st.markdown("<div style='padding: 0.5rem 0; color: green;'>✓</div>", unsafe_allow_html=True)
+                            else:
+                                st.markdown("<div style='padding: 0.5rem 0; color: #888;'>○</div>", unsafe_allow_html=True)
+                    
+                    st.markdown("---")
+                    
+                    # 显示分类汇总
+                    classified_count = sum(1 for v in st.session_state.alipay_classifications.values() 
+                                          if v.get('category'))
+                    unclassified_count = len(unclassified_bills) - classified_count
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("✅ 已分类", classified_count)
+                    with col2:
+                        st.metric("⏳ 未分类", unclassified_count)
+                    with col3:
+                        st.metric("📊 总计", len(unclassified_bills))
                 
                 # 导入按钮
-                if processed_bills:
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        if st.button('🚀 导入可分类账单', type='primary'):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if processed_bills:
+                        if st.button('🚀 导入可分类账单', type='primary', key='import_classified'):
                             success_count = self.alipay_processor.import_bills_to_database(processed_bills)
                             if success_count > 0:
                                 st.success(f"✅ 成功导入 {success_count} 条账单！")
                                 st.balloons()
                             else:
                                 st.error("导入失败，请检查数据格式")
-                    
-                    with col2:
-                        if unclassified_bills and st.button('📝 处理未分类账单'):
-                            st.info("未分类账单处理功能开发中...")
-                            # TODO: 实现手动分类功能
+                    else:
+                        st.info("暂无可自动分类的账单")
+                
+                with col2:
+                    if unclassified_bills:
+                        # 检查分类状态
+                        classified_count = sum(1 for v in st.session_state.get('alipay_classifications', {}).values() 
+                                              if v.get('category'))
+                        
+                        if classified_count > 0:
+                            if st.button('✅ 导入手动分类账单', type='primary', key='import_manual'):
+                                try:
+                                    success_count = 0
+                                    for idx, classification in st.session_state.alipay_classifications.items():
+                                        if classification.get('category'):
+                                            bill = classification['bill']
+                                            
+                                            # 处理日期格式：将 "2026/1/1 12:20" 或 "2026-01-01" 转换为 "20260101"
+                                            date_str = bill['raw_data']['创建时间']
+                                            if ' ' in date_str:
+                                                date_str = date_str.split()[0]  # 去掉时间部分
+                                            # 替换所有可能的分隔符
+                                            bill_date = date_str.replace('-', '').replace('/', '')
+                                            # 确保格式为 YYYYMMDD (补零)
+                                            if len(bill_date) < 8:
+                                                try:
+                                                    from datetime import datetime as dt
+                                                    parsed_date = dt.strptime(date_str, '%Y/%m/%d')
+                                                    bill_date = parsed_date.strftime('%Y%m%d')
+                                                except:
+                                                    try:
+                                                        parsed_date = dt.strptime(date_str, '%Y-%m-%d')
+                                                        bill_date = parsed_date.strftime('%Y%m%d')
+                                                    except:
+                                                        bill_date = date_str.replace('-', '').replace('/', '')
+                                            
+                                            classified_bill = {
+                                                'bill_date': bill_date,
+                                                'type': '支出',
+                                                'category': classification['category'],
+                                                'amount': -float(bill['raw_data']['订单金额(元)']),
+                                                'remark': f"{bill['raw_data']['商品名称']} - {bill['raw_data']['对方名称']}",
+                                                'create_time': datetime.now()
+                                            }
+                                            result = self.db.insert_bill(classified_bill)
+                                            if result:
+                                                success_count += 1
+                                    
+                                    if success_count > 0:
+                                        # 清空 session state
+                                        del st.session_state.alipay_classifications
+                                        st.success(f"✅ 成功导入 {success_count} 条手动分类账单！")
+                                        st.balloons()
+                                        st.info("💡 页面将在 2 秒后刷新...")
+                                        import time
+                                        time.sleep(2)
+                                        st.rerun()
+                                    else:
+                                        st.error("导入失败，请检查数据")
+                                except Exception as e:
+                                    st.error(f"导入失败: {e}")
+                                    logger.error(f"手动分类账单导入失败: {e}")
+                        else:
+                            st.warning("⚠️ 请先为账单选择或输入分类")
+                    else:
+                        st.success("✓ 所有账单已分类")
                 
             except Exception as e:
                 st.error(f"文件处理失败：{str(e)}")
@@ -861,40 +1008,204 @@ class BillTrackerApp:
                         st.write(f"- 收入: {income_count} 条")
                         st.write(f"- 支出: {expense_count} 条")
                 
-                # 显示无法分类的账单
+                # 显示无法分类的账单 - 直接集成分类功能
                 if unclassified_bills:
                     st.subheader('⚠️ 需要手动分类的账单')
                     st.warning(f"共 {len(unclassified_bills)} 条需要手动确认分类")
+                    st.info("💡 提示：可以从下拉框选择分类，也可以直接输入自定义分类")
                     
-                    # 显示无法分类的账单详情
-                    unclassified_df = pd.DataFrame([
-                        {
-                            '交易时间': bill['raw_data']['交易时间'],
-                            '交易对方': bill['raw_data']['交易对方'],
-                            '商品': bill['raw_data']['商品'],
-                            '收/支': bill['raw_data']['收/支'],
-                            '金额': bill['raw_data']['金额(元)']
-                        } for bill in unclassified_bills
-                    ])
-                    st.dataframe(unclassified_df)
+                    # 获取所有可用的分类
+                    income_categories = [cat.value for cat in BillCategory.Income]
+                    expense_categories = [cat.value for cat in BillCategory.Expense]
+                    all_categories = income_categories + expense_categories
+                    
+                    # 初始化 session state
+                    if 'wechat_classifications' not in st.session_state:
+                        st.session_state.wechat_classifications = {}
+                    
+                    # 使用紧凑的表格布局
+                    # 创建表头
+                    header_cols = st.columns([0.4, 1.2, 1.6, 0.7, 1.6, 0.6, 1.2, 1.2, 0.5])
+                    header_cols[0].markdown("**序号**")
+                    header_cols[1].markdown("**交易时间**")
+                    header_cols[2].markdown("**商品**")
+                    header_cols[3].markdown("**金额**")
+                    header_cols[4].markdown("**交易对方**")
+                    header_cols[5].markdown("**类型**")
+                    header_cols[6].markdown("**选择分类**")
+                    header_cols[7].markdown("**或输入分类**")
+                    header_cols[8].markdown("**状态**")
+                    
+                    # 添加表格样式
+                    st.markdown("""
+                    <style>
+                    .stSelectbox > div > div {
+                        padding: 0.25rem 0.5rem;
+                    }
+                    .stTextInput > div > div > input {
+                        padding: 0.25rem 0.5rem;
+                    }
+                    </style>
+                    """, unsafe_allow_html=True)
+                    
+                    # 为每条未分类账单创建一行（紧凑布局）
+                    for idx, bill in enumerate(unclassified_bills):
+                        cols = st.columns([0.4, 1.2, 1.6, 0.7, 1.6, 0.6, 1.2, 1.2, 0.5])
+                        
+                        transaction_type = bill['raw_data']['收/支']
+                        type_emoji = "📤" if transaction_type == '支' else "📥"
+                        
+                        with cols[0]:
+                            st.markdown(f"<div style='padding: 0.5rem 0;'>{idx + 1}</div>", unsafe_allow_html=True)
+                        
+                        with cols[1]:
+                            st.markdown(f"<div style='padding: 0.5rem 0; font-size: 0.9rem;'>{bill['raw_data']['交易时间']}</div>", unsafe_allow_html=True)
+                        
+                        with cols[2]:
+                            st.markdown(f"<div style='padding: 0.5rem 0; font-size: 0.9rem;'>{bill['raw_data']['商品']}</div>", unsafe_allow_html=True)
+                        
+                        with cols[3]:
+                            st.markdown(f"<div style='padding: 0.5rem 0; font-size: 0.9rem;'>¥{bill['raw_data']['金额(元)']}</div>", unsafe_allow_html=True)
+                        
+                        with cols[4]:
+                            st.markdown(f"<div style='padding: 0.5rem 0; font-size: 0.9rem;'>{bill['raw_data']['交易对方']}</div>", unsafe_allow_html=True)
+                        
+                        with cols[5]:
+                            st.markdown(f"<div style='padding: 0.5rem 0; font-size: 0.85rem;'>{type_emoji}{transaction_type}</div>", unsafe_allow_html=True)
+                        
+                        with cols[6]:
+                            selected_category = st.selectbox(
+                                '选择',
+                                [''] + all_categories,
+                                key=f"wechat_category_{idx}",
+                                label_visibility="collapsed"
+                            )
+                        
+                        with cols[7]:
+                            custom_category = st.text_input(
+                                '输入',
+                                value='',
+                                key=f"wechat_custom_{idx}",
+                                label_visibility="collapsed",
+                                placeholder="自定义"
+                            )
+                        
+                        with cols[8]:
+                            # 确定最终使用的分类（优先使用自定义）
+                            final_category = custom_category if custom_category else selected_category
+                            st.session_state.wechat_classifications[idx] = {
+                                'bill': bill,
+                                'category': final_category
+                            }
+                            
+                            # 状态指示
+                            if final_category:
+                                st.markdown("<div style='padding: 0.5rem 0; color: green;'>✓</div>", unsafe_allow_html=True)
+                            else:
+                                st.markdown("<div style='padding: 0.5rem 0; color: #888;'>○</div>", unsafe_allow_html=True)
+                    
+                    st.markdown("---")
+                    
+                    # 显示分类汇总
+                    classified_count = sum(1 for v in st.session_state.wechat_classifications.values() 
+                                          if v.get('category'))
+                    unclassified_count = len(unclassified_bills) - classified_count
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("✅ 已分类", classified_count)
+                    with col2:
+                        st.metric("⏳ 未分类", unclassified_count)
+                    with col3:
+                        st.metric("📊 总计", len(unclassified_bills))
                 
                 # 导入按钮
-                if processed_bills:
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        if st.button('🚀 导入可分类账单', type='primary'):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if processed_bills:
+                        if st.button('🚀 导入可分类账单', type='primary', key='wechat_import_classified'):
                             success_count = self.wechat_processor.import_bills_to_database(processed_bills)
                             if success_count > 0:
                                 st.success(f"✅ 成功导入 {success_count} 条账单！")
                                 st.balloons()
                             else:
                                 st.error("导入失败，请检查数据格式")
-                    
-                    with col2:
-                        if unclassified_bills and st.button('📝 处理未分类账单'):
-                            st.info("未分类账单处理功能开发中...")
-                            # TODO: 实现手动分类功能
+                    else:
+                        st.info("暂无可自动分类的账单")
+                
+                with col2:
+                    if unclassified_bills:
+                        # 检查分类状态
+                        classified_count = sum(1 for v in st.session_state.get('wechat_classifications', {}).values() 
+                                              if v.get('category'))
+                        
+                        if classified_count > 0:
+                            if st.button('✅ 导入手动分类账单', type='primary', key='wechat_import_manual'):
+                                try:
+                                    success_count = 0
+                                    for idx, classification in st.session_state.wechat_classifications.items():
+                                        if classification.get('category'):
+                                            bill = classification['bill']
+                                            transaction_type = bill['raw_data']['收/支']
+                                            amount_value = float(bill['raw_data']['金额(元)'])
+                                            
+                                            if transaction_type == '收':
+                                                bill_type = '收入'
+                                                amount = amount_value
+                                            else:
+                                                bill_type = '支出'
+                                                amount = -amount_value
+                                            
+                                            # 处理日期格式：将 "2026/1/1 12:20" 或 "2026-01-01" 转换为 "20260101"
+                                            date_str = bill['raw_data']['交易时间']
+                                            if ' ' in date_str:
+                                                date_str = date_str.split()[0]  # 去掉时间部分
+                                            # 替换所有可能的分隔符
+                                            bill_date = date_str.replace('-', '').replace('/', '')
+                                            # 确保格式为 YYYYMMDD (补零)
+                                            if len(bill_date) < 8:
+                                                try:
+                                                    from datetime import datetime as dt
+                                                    parsed_date = dt.strptime(date_str, '%Y/%m/%d')
+                                                    bill_date = parsed_date.strftime('%Y%m%d')
+                                                except:
+                                                    try:
+                                                        parsed_date = dt.strptime(date_str, '%Y-%m-%d')
+                                                        bill_date = parsed_date.strftime('%Y%m%d')
+                                                    except:
+                                                        bill_date = date_str.replace('-', '').replace('/', '')
+                                            
+                                            classified_bill = {
+                                                'bill_date': bill_date,
+                                                'type': bill_type,
+                                                'category': classification['category'],
+                                                'amount': amount,
+                                                'remark': f"{bill['raw_data']['商品']} - {bill['raw_data']['交易对方']}",
+                                                'create_time': datetime.now()
+                                            }
+                                            result = self.db.insert_bill(classified_bill)
+                                            if result:
+                                                success_count += 1
+                                    
+                                    if success_count > 0:
+                                        # 清空 session state
+                                        del st.session_state.wechat_classifications
+                                        st.success(f"✅ 成功导入 {success_count} 条手动分类账单！")
+                                        st.balloons()
+                                        st.info("💡 页面将在 2 秒后刷新...")
+                                        import time
+                                        time.sleep(2)
+                                        st.rerun()
+                                    else:
+                                        st.error("导入失败，请检查数据")
+                                except Exception as e:
+                                    st.error(f"导入失败: {e}")
+                                    logger.error(f"手动分类账单导入失败: {e}")
+                        else:
+                            st.warning("⚠️ 请先为账单选择或输入分类")
+                    else:
+                        st.success("✓ 所有账单已分类")
                 
             except Exception as e:
                 st.error(f"文件处理失败：{str(e)}")
