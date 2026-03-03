@@ -791,7 +791,9 @@ class BillTrackerApp:
                             st.markdown(f"<div style='padding: 0.5rem 0; font-size: 0.9rem;'>{bill['raw_data']['商品名称']}</div>", unsafe_allow_html=True)
                         
                         with cols[3]:
-                            st.markdown(f"<div style='padding: 0.5rem 0; font-size: 0.9rem;'>¥{bill['raw_data']['订单金额(元)']}</div>", unsafe_allow_html=True)
+                            # 去掉金额中的¥符号后再显示
+                            amount_display = str(bill['raw_data']['订单金额(元)']).replace('¥', '').replace('￥', '').strip()
+                            st.markdown(f"<div style='padding: 0.5rem 0; font-size: 0.9rem;'>¥{amount_display}</div>", unsafe_allow_html=True)
                         
                         with cols[4]:
                             st.markdown(f"<div style='padding: 0.5rem 0; font-size: 0.9rem;'>{bill['raw_data']['对方名称']}</div>", unsafe_allow_html=True)
@@ -871,6 +873,15 @@ class BillTrackerApp:
                                         if classification.get('category'):
                                             bill = classification['bill']
                                             
+                                            # 处理金额：去掉¥等特殊字符，只保留数字和小数点
+                                            amount_str = str(bill['raw_data']['订单金额(元)']).replace('¥', '').replace('￥', '').strip()
+                                            try:
+                                                amount_value = float(amount_str)
+                                            except ValueError:
+                                                st.error(f"金额格式错误: {bill['raw_data']['订单金额(元)']}")
+                                                logger.error(f"无法解析金额: {bill['raw_data']['订单金额(元)']}")
+                                                continue
+                                            
                                             # 处理日期格式：将 "2026/1/1 12:20" 或 "2026-01-01" 转换为 "20260101"
                                             date_str = bill['raw_data']['创建时间']
                                             if ' ' in date_str:
@@ -894,7 +905,7 @@ class BillTrackerApp:
                                                 'bill_date': bill_date,
                                                 'type': '支出',
                                                 'category': classification['category'],
-                                                'amount': -float(bill['raw_data']['订单金额(元)']),
+                                                'amount': -amount_value,
                                                 'remark': f"{bill['raw_data']['商品名称']} - {bill['raw_data']['对方名称']}",
                                                 'create_time': datetime.now()
                                             }
@@ -1065,7 +1076,9 @@ class BillTrackerApp:
                             st.markdown(f"<div style='padding: 0.5rem 0; font-size: 0.9rem;'>{bill['raw_data']['商品']}</div>", unsafe_allow_html=True)
                         
                         with cols[3]:
-                            st.markdown(f"<div style='padding: 0.5rem 0; font-size: 0.9rem;'>¥{bill['raw_data']['金额(元)']}</div>", unsafe_allow_html=True)
+                            # 去掉金额中的¥符号后再显示
+                            amount_display = str(bill['raw_data']['金额(元)']).replace('¥', '').replace('￥', '').strip()
+                            st.markdown(f"<div style='padding: 0.5rem 0; font-size: 0.9rem;'>¥{amount_display}</div>", unsafe_allow_html=True)
                         
                         with cols[4]:
                             st.markdown(f"<div style='padding: 0.5rem 0; font-size: 0.9rem;'>{bill['raw_data']['交易对方']}</div>", unsafe_allow_html=True)
@@ -1148,7 +1161,15 @@ class BillTrackerApp:
                                         if classification.get('category'):
                                             bill = classification['bill']
                                             transaction_type = bill['raw_data']['收/支']
-                                            amount_value = float(bill['raw_data']['金额(元)'])
+                                            
+                                            # 处理金额：去掉¥等特殊字符，只保留数字和小数点
+                                            amount_str = str(bill['raw_data']['金额(元)']).replace('¥', '').replace('￥', '').strip()
+                                            try:
+                                                amount_value = float(amount_str)
+                                            except ValueError:
+                                                st.error(f"金额格式错误: {bill['raw_data']['金额(元)']}")
+                                                logger.error(f"无法解析金额: {bill['raw_data']['金额(元)']}")
+                                                continue
                                             
                                             if transaction_type == '收':
                                                 bill_type = '收入'
