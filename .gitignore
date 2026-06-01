@@ -1,4 +1,5 @@
 .vscode
+.idea
 
 __pycache__
 
@@ -16,5 +17,11 @@ venv
 # 环境变量配置文件
 .env
 
-# addUser.py
+# 用户凭据（含密码哈希），切勿提交
+users.json
 
+# 系统文件
+.DS_Store
+**/.DS_Store
+
+# addUser.py

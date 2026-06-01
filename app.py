@@ -8,7 +8,7 @@ from bill_types import BillCategory
 from loguru import logger
 import os
 import socket
-from user_manager import UserManager
+from user_manager import UserManager, AUTH_SUCCESS, AUTH_NEED_CHANGE
 import csv
 import io
 from dotenv import load_dotenv
@@ -47,7 +47,7 @@ class BillTrackerApp:
         """初始化应用"""
         try:
             self.db = BillDatabase()
-            self.user_manager = UserManager()
+            self.user_manager = UserManager(self.db)
             self.alipay_processor = AlipayBillProcessor(self.db)
             self.wechat_processor = WechatBillProcessor(self.db)
             st.set_page_config(page_title='金账本', page_icon='💰')
@@ -92,39 +92,60 @@ class BillTrackerApp:
     def login_page(self):
         """登录页面"""
         st.title('💰 金账本 - 登录')
-        
+
+        # 首次登录（数据库无密码、文件初始密码校验通过）需先修改密码
+        if st.session_state.get('pending_pwd_change'):
+            self._change_password_page()
+            return
+
         username = st.text_input('用户名')
         password = st.text_input('密码', type='password')
-        
+
+        if st.button('登录'):
+            result = self.user_manager.authenticate(username, password)
+            if result == AUTH_SUCCESS:
+                st.session_state.logged_in = True
+                st.session_state.username = username
+                st.success('登录成功！')
+                logger.info(f"用户 {username} 登录成功", extra={"ip": get_client_ip()})
+                st.rerun()
+            elif result == AUTH_NEED_CHANGE:
+                # 初始密码正确，要求修改并持久化到数据库
+                st.session_state.pending_pwd_change = username
+                logger.info(f"用户 {username} 首次登录，需修改初始密码", extra={"ip": get_client_ip()})
+                st.rerun()
+            else:
+                st.error('用户名或密码错误')
+                logger.warning(f"登录失败：{username}")
+
+    def _change_password_page(self):
+        """首次登录修改初始密码页面"""
+        username = st.session_state.get('pending_pwd_change')
+        st.info(f'用户 {username} 首次登录，请设置新密码')
+
+        new_password = st.text_input('新密码', type='password', key='new_pwd')
+        confirm_password = st.text_input('确认新密码', type='password', key='confirm_pwd')
+
         col1, col2 = st.columns(2)
-        
         with col1:
-            if st.button('登录'):
-                if self.user_manager.authenticate(username, password):
+            if st.button('确认修改'):
+                if not new_password:
+                    st.error('新密码不能为空')
+                elif new_password != confirm_password:
+                    st.error('两次输入的密码不一致')
+                elif self.user_manager.set_password(username, new_password):
                     st.session_state.logged_in = True
                     st.session_state.username = username
-                    st.success('登录成功！')
-                    logger.info(f"用户 {username} 登录成功", extra={"ip": get_client_ip()})
+                    del st.session_state.pending_pwd_change
+                    st.success('密码修改成功，已登录！')
+                    logger.info(f"用户 {username} 修改初始密码并登录成功", extra={"ip": get_client_ip()})
                     st.rerun()
                 else:
-                    st.error('用户名或密码错误')
-                    logger.warning(f"登录失败：{username}")
-        
-        # 注册按钮暂时隐藏
-        # with col2:
-        #     if st.button('注册'):
-        #         new_username = st.text_input('新用户名')
-        #         new_password = st.text_input('新密码', type='password')
-        #         confirm_password = st.text_input('确认密码', type='password')
-                
-        #         if new_password == confirm_password:
-        #             if self.user_manager.add_user(new_username, new_password):
-        #                 st.success('注册成功！')
-        #                 logger.info(f"用户 {new_username} 注册成功", extra={"ip": get_client_ip()})
-        #             else:
-        #                 st.error('用户名已存在')
-        #         else:
-        #             st.error('两次密码不一致')
+                    st.error('密码保存失败，请重试')
+        with col2:
+            if st.button('取消'):
+                del st.session_state.pending_pwd_change
+                st.rerun()
     
     def run(self):
         """运行Streamlit应用"""

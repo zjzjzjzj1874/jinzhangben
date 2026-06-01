@@ -20,6 +20,12 @@ venv
 .vscode
 .idea
 
+# 凭据与个人数据（通过 volume 挂载，不打进镜像）
+users.json
+data/
+*.csv
+*.xlsx
+
 # Misc
 .DS_Store
 README.md

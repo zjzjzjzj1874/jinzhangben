@@ -1,9 +1,4 @@
 '''
-Author: zjzjzjzj1874 zjzjzjzj1874@gmail.com
-Date: 2025-01-02 15:14:19
-LastEditors: zjzjzjzj1874 zjzjzjzj1874@gmail.com
-LastEditTime: 2025-11-04 20:05:38
-FilePath: /bill-py-streamlit/bill_types.py
 Description: 账单类型
 '''
 from enum import Enum, auto

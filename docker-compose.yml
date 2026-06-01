@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   web:
     build: 
@@ -9,15 +7,15 @@ services:
     ports:
       - "8501:8501"
     volumes:
-      - .:/app
       - ./data:/app/data
+      # 单独挂载凭据文件，使其持久化且不打进镜像
+      - ./users.json:/app/users.json
     environment:
       - MONGO_URI=mongodb://mongo:27017/
       # - MONGO_DB_NAME=bill_tracker_test
       - MONGO_DB_NAME=bill_tracker
     depends_on:
       - mongo
-    privileged: true
     restart: always
     command: sh -c "streamlit run app.py --server.address 0.0.0.0 --server.port 8501 --browser.gatherUsageStats=false"
     networks:

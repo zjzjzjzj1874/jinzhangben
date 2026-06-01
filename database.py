@@ -3,6 +3,7 @@ from datetime import datetime
 import pandas as pd
 from loguru import logger
 import os
+import re
 from bill_types import BillCategory
 from datetime import timedelta
 from dateutil.relativedelta import relativedelta
@@ -64,10 +65,13 @@ class BillDatabase:
             
             self.db = self.client[db_name]
             self.collection = self.db['bills']
+            # 用户凭据集合（数据库优先存储登录密码）
+            self.users_collection = self.db['users']
             
             # 创建索引以提高查询性能
             self.collection.create_index([('bill_date', pymongo.ASCENDING)])
             self.collection.create_index([('type', pymongo.ASCENDING)])
+            self.users_collection.create_index([('username', pymongo.ASCENDING)], unique=True)
             
             # 检查数据库连接状态
             try:
@@ -82,6 +86,43 @@ class BillDatabase:
             logger.error(f"连接MongoDB失败: {e}")
             raise
     
+    def get_user_password(self, username):
+        """
+        从数据库读取用户的密码哈希
+
+        :param username: 用户名
+        :return: 密码哈希字符串，不存在时返回 None
+        """
+        try:
+            doc = self.users_collection.find_one({'username': username})
+            return doc.get('password') if doc else None
+        except Exception as e:
+            logger.error(f"读取用户密码失败: {e}")
+            return None
+
+    def set_user_password(self, username, password_hash):
+        """
+        将用户的密码哈希持久化到数据库（不存在则创建）
+
+        :param username: 用户名
+        :param password_hash: 已哈希的密码
+        :return: 是否成功
+        """
+        try:
+            self.users_collection.update_one(
+                {'username': username},
+                {'$set': {
+                    'username': username,
+                    'password': password_hash,
+                    'updated_at': datetime.now().isoformat()
+                }},
+                upsert=True
+            )
+            return True
+        except Exception as e:
+            logger.error(f"保存用户密码失败: {e}")
+            return False
+
     def insert_bill(self, bill_data):
         """
         插入新的账单记录
@@ -358,9 +399,9 @@ class BillDatabase:
             if amount_query:
                 query['amount'] = amount_query
             
-            # 备注模糊查询
+            # 备注模糊查询（转义正则特殊字符，避免正则注入/ReDoS）
             if remark:
-                query['remark'] = {'$regex': remark, '$options': 'i'}
+                query['remark'] = {'$regex': re.escape(str(remark)), '$options': 'i'}
             
             # 执行查询
             bills = list(self.collection.find(query))
