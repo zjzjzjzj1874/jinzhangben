@@ -8,6 +8,7 @@ services:
       - "8501:8501"
     volumes:
       - ./data:/app/data
+      - ./logs:/app/logs
       # 单独挂载凭据文件，使其持久化且不打进镜像
       - ./users.json:/app/users.json
     environment:
@@ -18,6 +19,28 @@ services:
       - mongo
     restart: always
     command: sh -c "streamlit run app.py --server.address 0.0.0.0 --server.port 8501 --browser.gatherUsageStats=false"
+    networks:
+      - streamlit-net
+
+  # 定时将 MongoDB 账单同步备份到 ./data（默认每 24 小时，启动时先执行一次）
+  backup:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/
+      - MONGO_DB_NAME=bill_tracker
+      - DATA_DIR=/app/data
+      - LOG_DIR=/app/logs
+      # 86400=每天一次；3600=每小时（测试用）
+      - BACKUP_INTERVAL_SECONDS=86400
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    depends_on:
+      - mongo
+    restart: always
+    command: sh /app/scripts/backup-loop.sh
     networks:
       - streamlit-net
 

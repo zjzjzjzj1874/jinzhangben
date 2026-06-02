@@ -19,12 +19,17 @@ import logging
 from datetime import datetime
 from database import BillDatabase
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOG_DIR = os.getenv('LOG_DIR', os.path.join(BASE_DIR, 'logs'))
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, 'scheduled_backup.log')
+
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('/app/logs/scheduled_backup.log'),
+        logging.FileHandler(LOG_FILE),
         logging.StreamHandler(sys.stdout)
     ]
 )
@@ -74,8 +79,7 @@ def check_environment():
     """
     logger.info("检查运行环境...")
     
-    # 检查数据目录
-    data_dir = '/app/data'
+    data_dir = os.getenv('DATA_DIR', os.path.join(BASE_DIR, 'data'))
     if not os.path.exists(data_dir):
         logger.warning(f"数据目录不存在，尝试创建: {data_dir}")
         try:
@@ -84,14 +88,11 @@ def check_environment():
         except Exception as e:
             logger.error(f"无法创建数据目录: {e}")
             return False
-    
-    # 检查日志目录
-    log_dir = '/app/logs'
-    if not os.path.exists(log_dir):
-        logger.warning(f"日志目录不存在，尝试创建: {log_dir}")
+
+    if not os.path.exists(LOG_DIR):
         try:
-            os.makedirs(log_dir, exist_ok=True)
-            logger.info(f"日志目录创建成功: {log_dir}")
+            os.makedirs(LOG_DIR, exist_ok=True)
+            logger.info(f"日志目录创建成功: {LOG_DIR}")
         except Exception as e:
             logger.error(f"无法创建日志目录: {e}")
             return False
