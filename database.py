@@ -86,26 +86,51 @@ class BillDatabase:
             logger.error(f"连接MongoDB失败: {e}")
             raise
     
+    def get_user_auth_record(self, username):
+        """
+        从数据库读取用户认证信息
+
+        :param username: 用户名
+        :return: {'password': str, 'force_password_change': bool} 或 None
+        :raises: Exception 数据库异常时抛出，由上层决定处理策略
+        """
+        try:
+            doc = self.users_collection.find_one(
+                {'username': username},
+                {'password': 1, 'force_password_change': 1, '_id': 0}
+            )
+            if not doc:
+                return None
+            return {
+                'password': doc.get('password'),
+                'force_password_change': bool(doc.get('force_password_change', False))
+            }
+        except Exception as e:
+            logger.error(f"读取用户认证信息失败: {e}")
+            raise
+
     def get_user_password(self, username):
         """
         从数据库读取用户的密码哈希
 
         :param username: 用户名
         :return: 密码哈希字符串，不存在时返回 None
+        :raises: Exception 数据库异常时抛出，由上层决定处理策略
         """
         try:
-            doc = self.users_collection.find_one({'username': username})
-            return doc.get('password') if doc else None
+            record = self.get_user_auth_record(username)
+            return record.get('password') if record else None
         except Exception as e:
             logger.error(f"读取用户密码失败: {e}")
-            return None
+            raise
 
-    def set_user_password(self, username, password_hash):
+    def set_user_password(self, username, password_hash, force_password_change=False):
         """
         将用户的密码哈希持久化到数据库（不存在则创建）
 
         :param username: 用户名
         :param password_hash: 已哈希的密码
+        :param force_password_change: 是否强制下次登录改密
         :return: 是否成功
         """
         try:
@@ -114,11 +139,15 @@ class BillDatabase:
                 {'$set': {
                     'username': username,
                     'password': password_hash,
+                    'force_password_change': force_password_change,
                     'updated_at': datetime.now().isoformat()
                 }},
                 upsert=True
             )
-            return True
+            # 写入后立即回读校验，避免“写入看似成功但实际未生效”
+            saved = self.get_user_auth_record(username)
+            return bool(saved and saved.get('password') == password_hash and
+                        saved.get('force_password_change') == force_password_change)
         except Exception as e:
             logger.error(f"保存用户密码失败: {e}")
             return False

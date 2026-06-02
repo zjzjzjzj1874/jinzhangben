@@ -68,15 +68,21 @@ class UserManager:
             logger.error(f"密码校验异常: {e}")
             return False
 
-    def _get_db_password(self, username):
-        """从数据库读取用户密码哈希，无数据库或不存在时返回 None"""
+    def _get_db_user_record(self, username):
+        """
+        从数据库读取用户认证记录
+
+        :return: (record, db_error)
+                 record 为 None 表示数据库中无该用户
+                 db_error 为 True 表示数据库查询异常
+        """
         if self.db is None:
-            return None
+            return None, False
         try:
-            return self.db.get_user_password(username)
+            return self.db.get_user_auth_record(username), False
         except Exception as e:
-            logger.error(f"读取数据库用户密码失败: {e}")
-            return None
+            logger.error(f"读取数据库用户认证记录失败: {e}")
+            return None, True
     
     def authenticate(self, username, password):
         """
@@ -96,13 +102,32 @@ class UserManager:
                 return AUTH_FAIL
 
             # 1. 数据库优先
-            db_hash = self._get_db_password(username)
-            if db_hash:
-                return AUTH_SUCCESS if self.verify_password(db_hash, password) else AUTH_FAIL
+            db_record, db_error = self._get_db_user_record(username)
+            # 数据库异常时不能降级到文件密码，否则会导致旧密码在异常场景下仍可登录
+            if db_error:
+                return AUTH_FAIL
+            if db_record is not None:
+                db_hash = db_record.get('password')
+                if not db_hash or not self.verify_password(db_hash, password):
+                    return AUTH_FAIL
+                # 数据库命中且标记了强制改密时，仍进入改密流程
+                if db_record.get('force_password_change', False):
+                    return AUTH_NEED_CHANGE
+                return AUTH_SUCCESS
 
             # 2. 数据库无密码，回退到文件中的初始密码
             file_hash = self.users.get(username)
             if file_hash and self.verify_password(file_hash, password):
+                # 将当前文件密码先持久化到数据库，并标记必须改密
+                if self.db is not None:
+                    persisted = self.db.set_user_password(
+                        username,
+                        file_hash,
+                        force_password_change=True
+                    )
+                    if not persisted:
+                        logger.error(f"首次登录持久化初始密码失败: {username}")
+                        return AUTH_FAIL
                 return AUTH_NEED_CHANGE
 
             return AUTH_FAIL
@@ -125,7 +150,12 @@ class UserManager:
             password_hash = self.hash_password(new_password)
 
             if self.db is not None:
-                return self.db.set_user_password(username, password_hash)
+                # 改密成功后，清除强制改密标记
+                return self.db.set_user_password(
+                    username,
+                    password_hash,
+                    force_password_change=False
+                )
 
             # 无数据库时退回文件存储
             self.users[username] = password_hash
