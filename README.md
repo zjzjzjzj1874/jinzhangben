@@ -1,523 +1,295 @@
 # 金账本 (Jinzhangben)
 
-## 项目简介 (Project Overview)
+基于 **Streamlit + MongoDB** 的个人记账 Web 应用：记录收支、导入支付宝/微信账单、多维度报表分析，以及可恢复的 Mongo 快照备份。
 
-金账本是一款个人财务管理应用，帮助用户轻松记录和追踪日常收支。
+## 功能结构
 
-This is a personal finance management application built with Streamlit and MongoDB, helping users easily record, analyze, and track daily income and expenses.
+登录后，侧栏为三个主模块；各模块在主区域通过 Tab 切换子功能：
 
-## 项目展示
+```
+💰 金账本
+├── 📝 录入
+│   ├── 单条录入
+│   ├── 支付宝导入（CSV）
+│   └── 微信导入（XLSX）
+├── 📊 报表分析
+│   ├── 财务看板（周 / 月 / 季 / 年）
+│   ├── 账单统计（年 / 月 / 类别）
+│   ├── 账单查询（日期、类型、分类、金额、备注关键词）
+│   └── 年度总览（年份 + 筛选；分页在页脚）
+└── 📦 数据备份与恢复
+    ├── 概览（库状态、目录说明）
+    ├── 执行备份（智能 / 强制）
+    ├── 数据恢复（bills_only / merge / full_replace）
+    └── 快照文件（列表与下载）
+```
+
+**登录说明**：优先使用数据库中的密码；若库中尚无该用户，可使用 `users.json` 中的初始密码登录，系统会写入数据库并**强制修改密码**后方可继续使用。
+
+## 界面预览
+
+以下为 **现版 UI**（侧栏三模块 + 主区 Tab）截图，存放于 `static/`。预览中的**金额、账单明细与用户名已脱敏**（示例用户「用户」、金额显示为 `***` 或模糊处理），与真实数据无关。
 
 <details>
-<summary>登录页面</summary>
+<summary>登录</summary>
 
-![登录页面](./static/login.png)
+![登录](./static/login.png)
 </details>
 
 <details>
-<summary>导航栏</summary>
+<summary>录入（侧栏 + Tab）</summary>
 
-![导航栏](./static/navigate.png)
+![侧栏与单条录入](./static/navigate.png)
+
+![单条录入](./static/record_bill.png)
+
+![支付宝导入](./static/alipay_import.png)
+
+![微信导入](./static/wechat_import.png)
 </details>
 
 <details>
-<summary>账单录入</summary>
-
-![账单录入](./static/record_bill.png)
-</details>
-
-<details>
-<summary>财务看板</summary>
+<summary>报表分析</summary>
 
 ![财务看板](./static/finance_board.png)
+
+![账单查询 · 筛选条件](./static/bill_query.png)
+
+![账单查询 · 关键词](./static/find_keyword.png)
+
+![年度总览](./static/bill_overview.png)
 </details>
 
 <details>
-<summary>账单统计</summary>
+<summary>数据备份与恢复</summary>
 
-![账单统计](./static/bill_statistics.png)
+![备份概览](./static/backup_restore.png)
 </details>
 
-<details>
-<summary>账单查询</summary>
+## 技术栈
 
-![账单查询](./static/bill_query.png)
-![账单关键词查询](./static/find_keyword.png)
-</details>
+| 类别 | 技术 |
+|------|------|
+| 应用 | Streamlit |
+| 数据库 | MongoDB 7 |
+| 数据处理 | Pandas |
+| 图表 | Plotly |
+| 认证 | bcrypt（`users.json` + 库内凭据） |
+| 日志 | Loguru |
+| 部署 | Docker Compose |
 
-<details>
-<summary>账单总览</summary>
+环境要求：**Python 3.9+**（本地开发）或 **Docker + Compose V2**（推荐生产）。
 
-![账单总览](./static/bill_overview.png)
-</details>
+## 快速开始
 
-<details>
-<summary>支付宝账单导入</summary>
+### 1. 克隆与依赖
 
-![支付宝账单导入](./static/alipay_import.png)
-</details>
-
-<details>
-<summary>微信账单导入</summary>
-
-![微信账单导入](./static/wechat_import.png)
-</details>
-
-## 技术栈 (Tech Stack)
-
-- **前端框架**: Streamlit
-- **数据库**: MongoDB
-- **数据处理**: Pandas
-- **数据可视化**: Plotly
-- **日志**: Loguru
-- **密码加密**: Bcrypt
-- Python 3.9+
-- Docker
-
-## 快速开始 (Quick Start)
-
-### 本地开发 (Local Development)
-
-#### 环境准备
-1. 克隆项目
 ```bash
 git clone https://github.com/zjzjzjzj1874/python_bill.git
-cd python_bill
-```
+cd python_bill   # 或你的目录名 bill-py-streamlit
 
-2. 创建虚拟环境
-```bash
 python3 -m venv venv
-source venv/bin/activate  # macOS/Linux
-# venv\Scripts\activate  # Windows
+source venv/bin/activate
+pip install -r requirements.txt
 ```
 
-3. 安装依赖
+### 2. 环境变量
+
 ```bash
-pip3 install -r requirements.txt
+cp .env.example .env
+# 可选：MONGO_URI、MONGO_DB_NAME（默认 bill_tracker）
 ```
+
+### 3. 用户凭据（必做）
+
+`users.json` 含密码哈希，**不会**进入 Git。首次部署请：
+
+```bash
+cp users.json.example users.json
+python addUser.py    # 交互式创建用户与 bcrypt 哈希
+```
+
+Docker 部署时 compose 会将 `./users.json` 挂载进容器，请在宿主机准备好该文件。
+
+### 4. 本地运行（本机 MongoDB）
+
+确保 MongoDB 已启动（默认 `localhost:27017`），然后：
+
+```bash
+streamlit run app.py
+# 或
+make build
+```
+
+浏览器访问：<http://localhost:8501>
 
 <details>
-<summary>4. 配置 MongoDB</summary>
+<summary>安装 MongoDB（各系统）</summary>
 
 ```bash
-# 安装 MongoDB（根据操作系统选择对应命令）
-
-# macOS (使用 Homebrew)
-brew tap mongodb/brew
-brew install mongodb-community
-
-# Ubuntu
-sudo apt-get install mongodb
-
-# Windows
-# 请访问 MongoDB 官网下载安装包：https://www.mongodb.com/try/download/community
-
-# 启动 MongoDB 服务
-# macOS
+# macOS (Homebrew)
+brew tap mongodb/brew && brew install mongodb-community
 brew services start mongodb-community
 
 # Ubuntu
-sudo service mongodb start
-
-# Windows
-# 通过服务管理器启动 MongoDB 服务
+sudo apt-get install mongodb && sudo service mongodb start
 ```
 
-> 注意：确保 MongoDB 服务正在运行，否则应用将无法正常工作。如需查看 MongoDB 服务状态：
-> - macOS: `brew services list`
-> - Ubuntu: `sudo service mongodb status`
-> - Windows: 在服务管理器中查看 MongoDB 服务状态
+Windows 请从 [MongoDB 官网](https://www.mongodb.com/try/download/community) 下载安装包。
 </details>
 
+### 5. Docker 部署（推荐）
 
-5. 配置环境变量
 ```bash
-# 复制环境变量示例文件
-cp .env.example .env
-
-# 编辑 .env 文件，根据需要修改配置
-# 主要配置项：
-# MONGO_URI=mongodb://localhost:27017/  # MongoDB连接URI（可选）
-# MONGO_DB_NAME=bill_tracker            # 数据库名称
+# 准备 users.json、.env（可选）后
+make run          # 启动 web + mongo + 定时 backup
 ```
 
-**环境配置说明：**
-- `MONGO_DB_NAME`: 数据库名称，支持不同环境使用不同数据库
-  - 生产环境：`bill_tracker`
-  - 测试环境：`bill_tracker_test`
-  - 开发环境：`bill_tracker_dev`
+| 服务 | 说明 |
+|------|------|
+| `web` | Streamlit，<http://localhost:8501> |
+| `mongo` | 宿主机端口 **37017** → 容器 27017 |
+| `backup` | 启动时备份一次，之后默认每 24 小时同步 Mongo → `./data` |
 
-6. 启动应用
+**改代码后务必重建镜像**（未挂载源码，仅 `restart` 不会更新逻辑）：
+
 ```bash
-streamlit run app.py
+make rebuild      # 重建 web + backup
+make logs         # 查看 web 日志
+make backup-once  # 立即执行一次备份
+make backup-logs  # 查看 backup 服务日志
+make restart      # 仅重启 web（不加载新代码）
 ```
 
-7. 配置智能备份（可选）
-```bash
-# 设置定时备份任务（每天凌晨2点）
-crontab -e
-# 添加以下行：
-# 0 2 * * * cd /path/to/your/project && python scheduled_backup.py
+等价命令：
 
-# 或手动运行备份
+```bash
+docker compose up -d --build web backup
+```
+
+## 功能说明
+
+### 录入
+
+- **单条录入**：选择收入/支出类型与分类（见 `bill_types.py`），填写日期、金额、备注。
+- **支付宝导入**：上传 CSV；按对方名称、商品名称等规则自动分类；未命中规则的可人工确认后入库。
+- **微信导入**：上传 XLSX（依赖 `openpyxl`）；支持收支类型识别与预览后导入。
+
+**自定义分类关键词**（可选）：
+
+```bash
+cp classifier_keywords.example.json classifier_keywords.local.json
+# 编辑后重启应用；local 文件已被 .gitignore，与内置通用词合并
+```
+
+### 报表分析
+
+- **财务看板**：按周/月/季/年汇总收入、支出与图表。
+- **账单统计**：年度、月度或按类别聚合。
+- **账单查询**：日期范围、类型、多分类、金额区间、备注关键词。
+- **年度总览**：按年查看 KPI（总收入/总支出/净收益）与明细分页；支持类型、分类（多选）、备注关键词筛选；**每页条数与页码在表格下方**，修改后自动刷新。
+
+### 数据备份与恢复
+
+数据目录（挂载在 `./data`，已在 `.gitignore`）：
+
+| 路径 | 用途 |
+|------|------|
+| `data/snapshots/` | 定时/手动全量快照，默认保留最新 5 份 |
+| `data/pre_restore/` | 执行恢复前自动写入的安全快照 |
+| `data/manifest.json` | 最近一次备份/恢复事件元数据 |
+| `data/yearly/` | 按年归档（预留） |
+
+- **智能备份**：比对数据哈希，无变化则跳过。
+- **强制备份**：忽略哈希检测，立即生成快照。
+- **恢复模式**：
+  - `bills_only`：仅恢复账单集合
+  - `merge`：与现有数据合并
+  - `full_replace`：全量替换（可选同时恢复 `users`）
+- 恢复前会自动写入 `pre_restore/`；可用最近的安全快照回滚。
+
+定时备份由 `backup` 服务执行 `scripts/backup-loop.sh`；本地也可：
+
+```bash
 python scheduled_backup.py
 ```
 
-### Docker 部署 (Docker Deployment)
+## 命令行导入（可选）
 
-#### 前提条件
-- 安装 Docker
-- 安装 Docker Compose
+与 Web 录入 Tab 能力相同，适合批量或脚本化：
 
-#### 部署步骤
-1. 构建并启动容器
+**支付宝**（CSV 放 `csv/ali/`）：
+
 ```bash
-docker-compose up --build
-```
-
-2. 访问应用
-- Web应用：`http://localhost:8501`
-- MongoDB：内部服务，不对外暴露
-
-#### 常用 Docker 命令
-```bash
-# 后台运行
-docker-compose up -d
-
-# 查看日志
-docker-compose logs web
-
-# 停止服务
-docker-compose down
-
-# 运行智能备份
-docker exec bill-py-streamlit-web-1 python /app/scheduled_backup.py
-
-# 进入容器查看备份文件
-docker exec -it bill-py-streamlit-web-1 ls -la /app/data/
-```
-
-## 主要功能 (Key Features)
-
-### 1. 用户认证 (User Authentication)
-- 安全的用户登录和注册系统
-- 使用 bcrypt 加密存储用户密码
-- 保护个人财务数据隐私
-
-### 2. 账单记录 (Bill Recording)
-- 支持多种收入类型：
-  - 兼职收入
-  - 补贴
-  - 其他收入
-
-- 支持多种支出类型：
-  - 餐饮
-  - 羽毛球
-  - 交通
-  - 娱乐
-  - 日用品
-  - 生活缴费
-  - 小车维护
-  - 小车保险
-  - 停车费
-  - 服饰
-  - 旅行
-  - 书籍
-  - 运动健身
-  - 人情往来
-  - 家居
-  - 物业
-
-### 3. 数据查询 (Data Query)
-- 灵活的多条件账单查询
-- 支持按日期范围、账单类型、金额范围等筛选
-- 支持备注关键词模糊搜索
-
-### 4. 支付宝账单导入 (Alipay Bill Import)
-- 支持CSV格式的支付宝账单文件导入
-- 智能自动分类功能，基于交易对方和商品名称
-- 批量导入账单数据，提高录入效率
-- 支持Web界面和命令行两种导入方式
-- 数据预览功能，导入前可查看和确认
-- 支持手动处理未分类账单
-
-### 5. 微信账单导入 (WeChat Bill Import)
-- 支持Excel格式的微信账单文件导入
-- 智能自动分类功能，基于交易对方和商品描述
-- 支持收入和支出两种类型的账单
-- 批量导入账单数据，提高录入效率
-- 支持Web界面和命令行两种导入方式
-- 数据预览功能，导入前可查看分类结果
-- 支持手动处理未分类账单
-- 预览模式，可在不导入数据库的情况下查看处理结果
-
-### 6. 财务分析 (Financial Analysis)
-- 周、月、季度、年度财务总结
-- 收支图表可视化
-- 详细的财务指标展示
-
-### 7. 智能数据备份 (Smart Data Backup)
-- **增量备份**: 自动检测数据变化，只在数据发生变化时进行备份
-- **智能清理**: 自动保留最新的5个备份文件，删除过期备份
-- **双重备份模式**:
-  - 智能备份：检测数据变化，避免重复备份
-  - 强制备份：跳过检测，强制创建备份
-- **周期性备份**: 支持定时任务自动备份
-- **备份管理**: 
-  - 显示备份文件详细信息（大小、记录数、数据哈希值）
-  - 提供历史备份文件下载
-  - 备份文件完整性验证
-
-## 账单导入使用指南 (Bill Import Guide)
-
-### 支付宝账单导入 (Alipay Import)
-
-#### Web界面导入
-1. 登录应用后，在侧边栏选择「支付宝账单导入」
-2. 上传支付宝导出的CSV格式账单文件
-3. 系统会自动预览和分类账单
-4. 确认后点击导入按钮
-
-#### 命令行导入
-```bash
-# 将支付宝账单CSV文件放在 csv/ali/ 目录下
-mkdir -p csv/ali
-cp your-alipay-bill.csv csv/ali/
-
-# 使用默认文件名 zfb-bill.csv
 python import_alipay_bills.py
-
-# 或指定文件名
 python import_alipay_bills.py your-alipay-bill.csv
 ```
 
-#### 支持的文件格式
-支付宝账单CSV文件必须包含以下列：
-- `创建时间`: 交易时间
-- `商品名称`: 交易描述
-- `订单金额(元)`: 交易金额
-- `对方名称`: 交易对方
-- `分类`: 交易分类（可选）
+必需列：`创建时间`、`商品名称`、`订单金额(元)`、`对方名称`（`分类` 可选）。
 
-#### 自动分类规则
-- **交通**: 包含"地铁"、"公交"、"打车"、"网约车"等
-- **餐饮**: 包含"外卖"、"咖啡"、"奶茶"、"零食"、"小吃"等
-- **日用品**: 包含"超市"、"便利店"、"购物"、"日用"等
-- 个人专属关键词（常去店铺、城市、车牌等）可写入 `classifier_keywords.local.json`（该文件不纳入版本库），启动时会与默认规则自动合并
-- 其他无法自动分类的账单会单独列出供手动确认
+**微信**（XLSX 放 `csv/tencent/`）：
 
-## 智能备份系统使用指南 (Smart Backup Guide)
-
-### 功能特点
-- **增量检测**: 通过数据哈希值检测数据变化，避免重复备份
-- **自动清理**: 保留最新5个备份文件，自动删除过期备份
-- **完整性验证**: 每个备份文件包含数据哈希值，确保数据完整性
-- **灵活备份**: 支持智能备份和强制备份两种模式
-
-### Web界面使用
-
-#### 智能备份
-1. 登录应用后，在侧边栏选择「数据备份」
-2. 点击「智能备份」按钮
-3. 系统会自动检测数据是否发生变化
-4. 如果数据有变化，创建新备份；如果无变化，跳过备份
-5. 备份完成后可查看备份详情和下载备份文件
-
-#### 强制备份
-1. 在数据备份页面点击「强制备份」按钮
-2. 系统会跳过数据变化检测，直接创建备份
-3. 适用于需要手动创建备份的场景
-
-#### 备份文件管理
-- 查看最新5个备份文件的详细信息
-- 每个备份文件显示：文件名、大小、创建时间、记录数
-- 点击下载按钮可下载对应的备份文件
-- 系统自动清理超过5个的旧备份文件
-
-### 命令行使用
-
-#### 周期性备份脚本
 ```bash
-# 在Docker容器中运行智能备份
-docker exec bill-py-streamlit-web-1 python /app/scheduled_backup.py
-
-# 本地环境运行
-python scheduled_backup.py
-```
-
-#### 设置定时任务
-```bash
-# 编辑crontab
-crontab -e
-
-# 添加定时任务（每天凌晨2点执行备份）
-0 2 * * * docker exec bill-py-streamlit-web-1 python /app/scheduled_backup.py
-
-# 或者每6小时执行一次
-0 */6 * * * docker exec bill-py-streamlit-web-1 python /app/scheduled_backup.py
-```
-
-### 备份文件格式
-备份文件为JSON格式，包含以下信息：
-```json
-{
-  "backup_info": {
-    "backup_time": "2025-11-03 15:02:40",
-    "database_name": "bill_tracker",
-    "total_records": 2222,
-    "file_size": "0.70MB",
-    "data_hash": "6854f26add14a21b0c07775ec1b3e51d"
-  },
-  "databases": {
-    "bill_tracker": {
-      "bills": {
-        "count": 2222,
-        "data": [...]
-      }
-    }
-  }
-}
-```
-
-### 备份策略建议
-- **开发环境**: 每次重要数据变更后手动智能备份
-- **生产环境**: 设置每日自动备份（凌晨2点）
-- **重要操作前**: 使用强制备份创建安全点
-- **数据迁移**: 使用强制备份确保数据完整性
-
-### 微信账单导入 (WeChat Import)
-
-#### Web界面导入
-1. 登录应用后，在侧边栏选择「微信账单导入」
-2. 上传微信导出的Excel格式账单文件
-3. 系统会自动预览和分类账单
-4. 确认后点击导入按钮
-
-#### 命令行导入
-```bash
-# 将微信账单Excel文件放在 csv/tencent/ 目录下
-mkdir -p csv/tencent
-cp your-wechat-bill.xlsx csv/tencent/
-
-# 导入微信账单
 python import_wechat_bills.py csv/tencent/your-wechat-bill.xlsx
-
-# 预览模式（不导入数据库）
 python import_wechat_bills.py csv/tencent/your-wechat-bill.xlsx --preview
 ```
 
-#### 支持的文件格式
-微信账单Excel文件必须包含以下列：
-- `交易时间`: 交易时间
-- `交易对方`: 交易对方
-- `商品`: 交易描述
-- `收/支`: 收入或支出类型
-- `金额(元)`: 交易金额
-- `分类`: 交易分类（可选）
+必需列：`交易时间`、`交易对方`、`商品`、`收/支`、`金额(元)`（`分类` 可选）。
 
-#### 自动分类规则
-- **交通**: 滴滴出行、哈啰出行、地铁、公交相关
-- **餐饮**: 美团、饿了么、星巴克、肯德基、麦当劳等
-- **日用品**: 永辉超市、沃尔玛、家乐福等
-- **停车费**: 深圳市微泊云科技有限公司、华敏物业等
-- **羽毛球**: 闪动体育科技、球馆相关
-- **小车加油**: 壳牌等加油站
-- **美妆**: 快剪等美容服务
-- 其他无法自动分类的账单会单独列出供手动确认
+## 配置
 
-## 配置 (Configuration)
+| 变量 / 文件 | 说明 |
+|-------------|------|
+| `MONGO_URI` | MongoDB 连接串（Docker 内为 `mongodb://mongo:27017/`） |
+| `MONGO_DB_NAME` | 库名，如 `bill_tracker` / `bill_tracker_test` |
+| `users.json` | 初始用户哈希（勿提交仓库） |
+| `classifier_keywords.local.json` | 私有导入分类词（勿提交仓库） |
+| `DATA_DIR` / `LOG_DIR` | 备份脚本与 backup 服务使用，默认 `./data`、`./logs` |
 
-### 环境变量
-- `MONGO_URI`：MongoDB 连接字符串
-- 可在 `.env` 文件中配置
-
-- 默认 MongoDB 地址: `localhost:27017`
-- 日志文件位置: `logs/` 目录
-- 用户信息存储: `users.json`
+日志按天写入 `logs/`，默认保留约 30 天。
 
 ## 目录结构
+
 ```
-jinzhangben/
-│
-├── app.py                      # Streamlit 主应用
-├── database.py                 # 数据库交互
-├── user_manager.py             # 用户管理
-│
-├── bill_classifier.py          # 通用账单分类器
-├── alipay_bill_processor.py    # 支付宝账单处理器
-├── wechat_bill_processor.py    # 微信账单处理器
-├── import_alipay_bills.py      # 支付宝账单导入脚本
-├── import_wechat_bills.py      # 微信账单导入脚本
-├── scheduled_backup.py         # 周期性智能备份脚本
-│
-├── csv/                        # 账单文件目录
-│   ├── ali/                    # 支付宝账单文件
-│   └── tencent/                # 微信账单文件
-│
-├── data/                       # 数据文件目录
-│   └── bills_backup_*.json     # 备份文件
-│
-├── logs/                       # 日志文件目录
-├── static/                     # 静态资源文件
-│
-├── Dockerfile                  # Docker 构建配置
-├── docker-compose.yml          # 服务编排
-├── requirements.txt            # Python 依赖
-├── .env.example                # 环境变量示例
-│
-└── README.md                   # 项目文档
+.
+├── app.py                      # Streamlit 主应用（导航、各页面）
+├── database.py                 # Mongo 访问、查询、备份与恢复
+├── user_manager.py             # 登录与改密（库优先）
+├── bill_types.py               # 收入/支出分类枚举
+├── bill_classifier.py          # 导入分类（默认 + local 合并）
+├── alipay_bill_processor.py
+├── wechat_bill_processor.py
+├── import_alipay_bills.py
+├── import_wechat_bills.py
+├── scheduled_backup.py
+├── scripts/backup-loop.sh      # Docker backup 入口循环
+├── data/                       # 快照与 manifest（运行时生成）
+├── logs/
+├── static/                     # README 截图等资源
+├── users.json.example
+├── classifier_keywords.example.json
+├── Dockerfile
+├── docker-compose.yml
+├── Makefile
+├── requirements.txt
+└── .env.example
 ```
 
-## 安全性 (Security)
+## 安全与开源注意
 
-- 用户密码使用 bcrypt 加密存储
-- 日志记录包含 IP 地址信息
-- 日志按天切割，保留最近 30 天记录
+- 密码使用 bcrypt；`users.json` 与 `data/` 已忽略，勿将真实哈希提交到公开仓库。
+- 备注模糊查询对正则特殊字符做了转义，降低注入/ReDoS 风险。
+- Docker 镜像通过 `.dockerignore` 排除凭据与本地数据；凭据靠卷挂载持久化。
+- 首次从 `users.json` 登录会落库并强制改密；数据库异常时**不会**回退到文件密码。
 
-## 贡献指南 (Contributing)
-1. Fork 项目
-2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m '添加了某某功能'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 提交 Pull Request
+更详细的变更记录见 [CHANGELOG.md](./CHANGELOG.md)。
 
-## 许可证 (License)
-Apache License
+## 贡献与许可
 
-## 联系 (Contact)
+1. Fork 本仓库  
+2. 创建分支：`git checkout -b feature/your-feature`  
+3. 提交改动并发起 Pull Request  
 
+许可证：[Apache License](./LICENSE)
 
-GitHub: [zjzjzjzj1874](https://github.com/zjzjzjzj1874)
-
-
-
-<!-- 提示词：这个是支付宝的账单，需要你给我写一个支付宝账单导入数据库的功能：
-
-1. 导入模式：在页面点击支付宝账单导入，可以导入；也可以在项目的根目录下面运行脚本导入；
-
-2. 导入字段匹配，csv中的创建时间就是数据库创建时间，bill_date按照数据库格式(20250720)赋值; 这里面的账单都是支出类型，订单金额就是数据库的金额；数据库的备注字段就是csv的商品名称;
-
-3. 特殊说明：如果有分类的，直接使用csv中的分类；如果没有分类的，按照下面的条件来分类：
-
-csv中`对方名称`是`成都地铁运营有限公司`，分类为交通；
-
-csv中`对方名称`是`四川乡村基餐饮有限公司`，分类为餐饮；
-
-csv中`商品名称`包含`外卖订单`，分类为餐饮；
-
-csv中`商品名称`包含`咖啡`，分类为餐饮；
-
-csv中`商品名称`包含`奶茶`，分类为餐饮；
-
-csv中`商品名称`包含`零食`，分类为餐饮；
-
-csv中`商品名称`包含`小吃`，分类为餐饮；
-
-csv中`商品名称`包含`店内购物`，分类为日用品；
-
-csv中`商品名称`包含`满彭菜场`，分类为日用品；
-
-csv中`商品名称`包含`集刻便利店`，分类为日用品；
-
-如果以上都不满足的订单，单独拿出来，找我一条一条确认分类。 -->
+GitHub：[zjzjzjzj1874](https://github.com/zjzjzjzj1874)
