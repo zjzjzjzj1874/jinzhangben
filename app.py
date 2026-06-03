@@ -687,11 +687,28 @@ class BillTrackerApp:
         except Exception as e:
             st.error(f'财务看板获取失败: {e}')
     
-    def _fetch_annual_overview(self, selected_year, page, page_size):
-        summary = self.db.get_annual_summary(selected_year)
-        bills_result = self.db.get_bills_by_year(selected_year, int(page), int(page_size))
+    def _fetch_annual_overview(self, filters, page, page_size):
+        bill_type = filters.get('bill_type')
+        bill_categories = filters.get('bill_categories') or None
+        remark = filters.get('remark') or None
+        selected_year = filters['year']
+        summary = self.db.get_annual_summary(
+            selected_year,
+            bill_type=bill_type,
+            bill_categories=bill_categories,
+            remark=remark,
+        )
+        bills_result = self.db.get_bills_by_year(
+            selected_year,
+            int(page),
+            int(page_size),
+            bill_type=bill_type,
+            bill_categories=bill_categories,
+            remark=remark,
+        )
         return {
             'year': selected_year,
+            'filters': filters,
             'page': int(page),
             'page_size': int(page_size),
             'summary': summary,
@@ -718,37 +735,63 @@ class BillTrackerApp:
         """年度总览页面"""
         current_year = datetime.now().year
         year_options = list(range(current_year, current_year - 5, -1))
+        category_options = (
+            [c.value for c in BillCategory.Expense]
+            + [c.value for c in BillCategory.Income]
+        )
 
         if 'annual_last_result' not in st.session_state:
             st.session_state.annual_last_result = None
+        if 'annual_page' not in st.session_state:
+            st.session_state.annual_page = 1
+        if 'annual_page_size' not in st.session_state:
+            st.session_state.annual_page_size = 10
 
         with st.container(border=True):
             st.markdown('##### 查询条件')
-            c1, c2, c3, c4 = st.columns([1.2, 1, 1, 0.8])
-            with c1:
+            r1a, r1b, r1c = st.columns(3)
+            with r1a:
                 selected_year = st.selectbox('年份', year_options, index=0, key='annual_year')
-            with c2:
-                page_size = st.selectbox('每页', [10, 20, 50, 100], index=0, key='annual_page_size')
-            with c3:
-                page = st.number_input('页码', min_value=1, value=1, step=1, key='annual_page')
-            with c4:
-                st.markdown('<div style="height:1.6rem"></div>', unsafe_allow_html=True)
-                submitted = st.button('查询', type='primary', use_container_width=True, key='annual_query_btn')
+            with r1b:
+                bill_type = st.selectbox('账单类型', ['全部', '支出', '收入'], key='annual_bill_type')
+            with r1c:
+                bill_categories = st.multiselect(
+                    '账单分类（可多选）',
+                    category_options,
+                    key='annual_categories',
+                )
+            keyword = st.text_input('关键词（匹配备注）', key='annual_keyword')
+            submitted = st.button('查询', type='primary', key='annual_query_btn')
 
         if submitted:
-            try:
-                with st.spinner('加载中...'):
-                    st.session_state.annual_last_result = self._fetch_annual_overview(
-                        selected_year, page, page_size
-                    )
-            except Exception as e:
-                st.error(f'年度总览获取失败: {e}')
-                return
+            st.session_state.annual_filters = {
+                'year': selected_year,
+                'bill_type': bill_type if bill_type != '全部' else None,
+                'bill_categories': bill_categories or None,
+                'remark': keyword.strip() or None,
+            }
+            st.session_state.annual_page = 1
+
+        filters = st.session_state.get('annual_filters')
+        if filters:
+            page = int(st.session_state.annual_page)
+            page_size = int(st.session_state.annual_page_size)
+            fetch_key = (tuple(sorted(filters.items())), page, page_size)
+            if fetch_key != st.session_state.get('annual_fetch_key'):
+                try:
+                    with st.spinner('加载中...'):
+                        st.session_state.annual_last_result = self._fetch_annual_overview(
+                            filters, page, page_size
+                        )
+                    st.session_state.annual_fetch_key = fetch_key
+                except Exception as e:
+                    st.error(f'年度总览获取失败: {e}')
+                    return
 
         result = st.session_state.annual_last_result
         if not result:
             st.markdown(
-                '<div class="empty-hint">📅 选择年份与分页后，点击「查询」查看年度汇总与明细</div>',
+                '<div class="empty-hint">📅 设置查询条件后点击「查询」，查看年度汇总与明细</div>',
                 unsafe_allow_html=True,
             )
             return
@@ -759,26 +802,52 @@ class BillTrackerApp:
         selected_year = result['year']
         page_size = result['page_size']
         page = result['page']
+        total = bills_result['total_count']
+        total_pages = max(1, (total + page_size - 1) // page_size)
 
         self._render_kpi_metrics(summary)
 
         st.subheader(f'{selected_year} 年账单明细')
         if bills.empty:
             st.markdown(
-                f'<div class="empty-hint">暂无 {selected_year} 年的账单数据<br><span style="font-size:0.85rem">'
-                f'可尝试其他年份，或先在「录入」中添加账单</span></div>',
+                f'<div class="empty-hint">暂无符合条件的账单<br><span style="font-size:0.85rem">'
+                f'可调整筛选条件或更换年份后重试</span></div>',
                 unsafe_allow_html=True,
             )
-            return
+        else:
+            st.dataframe(
+                bills[['bill_date', 'type', 'category', 'amount', 'remark']],
+                use_container_width=True,
+                hide_index=True,
+            )
 
-        st.dataframe(
-            bills[['bill_date', 'type', 'category', 'amount', 'remark']],
-            use_container_width=True,
-            hide_index=True,
-        )
-        total = bills_result['total_count']
-        total_pages = max(1, (total + page_size - 1) // page_size)
-        st.caption(f'第 {page} / {total_pages} 页 · 每页 {page_size} 条 · 共 {total:,} 条')
+        with st.container(border=True):
+            st.markdown('##### 分页')
+            p1, p2, p3 = st.columns([1, 1, 2])
+            with p1:
+                def _on_annual_page_size_change():
+                    st.session_state.annual_page = 1
+
+                st.selectbox(
+                    '每页',
+                    [10, 20, 50, 100],
+                    key='annual_page_size',
+                    on_change=_on_annual_page_size_change,
+                )
+            with p2:
+                st.number_input(
+                    '页码',
+                    min_value=1,
+                    max_value=total_pages,
+                    step=1,
+                    key='annual_page',
+                )
+            with p3:
+                st.markdown(
+                    f'<p style="margin-top:2rem;color:#64748b;font-size:0.9rem">'
+                    f'第 {page} / {total_pages} 页 · 每页 {page_size} 条 · 共 {total:,} 条</p>',
+                    unsafe_allow_html=True,
+                )
     
     def alipay_import_page(self):
         """支付宝账单导入页面"""

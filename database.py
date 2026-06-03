@@ -229,27 +229,50 @@ class BillDatabase:
             logger.error(f"账单插入失败: {e}")
             raise
     
-    def get_bills_by_year(self, year, page=1, page_size=10):
+    def _build_year_filter(self, year, bill_type=None, bill_categories=None, remark=None):
+        """构建指定年份内的 MongoDB 查询条件（可选类型、分类、备注关键词）。"""
+        year_start = int(f"{year}0101")
+        year_end = int(f"{year}1231")
+        query = {
+            '$expr': {
+                '$and': [
+                    {'$gte': [{'$toInt': '$bill_date'}, year_start]},
+                    {'$lte': [{'$toInt': '$bill_date'}, year_end]}
+                ]
+            }
+        }
+        if bill_type:
+            query['type'] = bill_type
+        if bill_categories:
+            valid_categories = [c for c in bill_categories if isinstance(c, str) and c.strip()]
+            if valid_categories:
+                query['category'] = {'$in': valid_categories}
+        if remark:
+            query['remark'] = {'$regex': re.escape(str(remark)), '$options': 'i'}
+        return query
+
+    def get_bills_by_year(
+        self,
+        year,
+        page=1,
+        page_size=10,
+        bill_type=None,
+        bill_categories=None,
+        remark=None,
+    ):
         """
         获取指定年份的账单（分页）
         
         :param year: 年份
         :param page: 页码
         :param page_size: 每页记录数
+        :param bill_type: 账单类型（支出/收入）
+        :param bill_categories: 账单分类列表
+        :param remark: 备注关键词
         :return: 分页后的账单数据
         """
         try:
-            # 构建年份查询条件
-            year_start = int(f"{year}0101")
-            year_end = int(f"{year}1231")
-            query = {
-                '$expr': {
-                    '$and': [
-                        {'$gte': [{'$toInt': '$bill_date'}, year_start]},
-                        {'$lte': [{'$toInt': '$bill_date'}, year_end]}
-                    ]
-                }
-            }
+            query = self._build_year_filter(year, bill_type, bill_categories, remark)
             
             # 执行分页查询
             result = self.paginate_query(
@@ -326,30 +349,22 @@ class BillDatabase:
             logger.error(f"分页查询失败: {e}")
             raise
     
-    def get_annual_summary(self, year):
+    def get_annual_summary(self, year, bill_type=None, bill_categories=None, remark=None):
         """
-        获取指定年份的财务年度总结
+        获取指定年份的财务年度总结（支持与明细相同的筛选条件）
         
         :param year: 年份
+        :param bill_type: 账单类型（支出/收入）
+        :param bill_categories: 账单分类列表
+        :param remark: 备注关键词
         :return: 包含年度收入、支出和净收益的字典
         """
         try:
-            # 构建年份查询条件
-            start_date_int = int(f"{year}0101")
-            end_date_int = int(f"{year}1231")
+            match_query = self._build_year_filter(year, bill_type, bill_categories, remark)
             
             # 聚合管道
             pipeline = [
-                {
-                    '$match': {
-                        '$expr': {
-                            '$and': [
-                                {'$gte': [{'$toInt': '$bill_date'}, start_date_int]},
-                                {'$lte': [{'$toInt': '$bill_date'}, end_date_int]}
-                            ]
-                        }
-                    }
-                },
+                {'$match': match_query},
                 {
                     '$group': {
                         '_id': None,
