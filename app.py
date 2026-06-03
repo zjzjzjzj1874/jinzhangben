@@ -82,6 +82,63 @@ class BillTrackerApp:
                 padding: 10px;
                 border: 1px solid #ecf0f1;  /* 轻微边框 */
             }
+            /* 主区域 Tab：胶囊样式，隐藏默认红色下划线 */
+            .stTabs [data-baseweb="tab-list"] {
+                gap: 6px;
+                background: #eef1f6;
+                border-radius: 12px;
+                padding: 6px 8px;
+                border-bottom: none !important;
+            }
+            .stTabs [data-baseweb="tab-highlight"] {
+                display: none !important;
+            }
+            .stTabs [data-baseweb="tab"] {
+                height: 2.5rem;
+                border-radius: 8px;
+                padding: 0 1.1rem;
+                font-weight: 600;
+                color: #5c6b7a;
+                background: transparent;
+                border: none !important;
+            }
+            .stTabs [aria-selected="true"] {
+                background: #ffffff !important;
+                color: #c0392b !important;
+                box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+                border: none !important;
+            }
+            .stTabs [data-baseweb="tab-panel"] {
+                padding-top: 1.25rem;
+            }
+            div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlockBorderWrapper"] {
+                border-radius: 12px;
+            }
+            h2.module-title {
+                font-size: 1.35rem;
+                font-weight: 700;
+                color: #2c3e50;
+                margin: 0 0 0.75rem 0;
+                padding-bottom: 0.5rem;
+                border-bottom: 2px solid #eef1f6;
+            }
+            .kpi-income [data-testid="stMetricValue"] { color: #16a34a !important; }
+            .kpi-expense [data-testid="stMetricValue"] { color: #dc2626 !important; }
+            .kpi-net [data-testid="stMetricValue"] { color: #2563eb !important; }
+            .section-title {
+                font-size: 1.05rem;
+                font-weight: 600;
+                color: #334155;
+                margin: 1rem 0 0.5rem;
+            }
+            .empty-hint {
+                text-align: center;
+                padding: 2.5rem 1rem;
+                color: #94a3b8;
+                background: #f8fafc;
+                border-radius: 12px;
+                border: 1px dashed #cbd5e1;
+            }
             </style>
             """, unsafe_allow_html=True)
             
@@ -153,61 +210,61 @@ class BillTrackerApp:
                 del st.session_state.pending_pwd_change
                 st.rerun()
     
+    def _input_module_page(self):
+        """录入模块：主区域 Tab"""
+        tab_record, tab_alipay, tab_wechat = st.tabs(['单条录入', '支付宝导入', '微信导入'])
+        with tab_record:
+            self.record_bill_page()
+        with tab_alipay:
+            self.alipay_import_page()
+        with tab_wechat:
+            self.wechat_import_page()
+
+    def _report_module_page(self):
+        """报表分析模块：主区域 Tab"""
+        tab_dash, tab_stats, tab_query, tab_annual = st.tabs(
+            ['财务看板', '账单统计', '账单查询', '年度总览']
+        )
+        with tab_dash:
+            self.dashboard_page()
+        with tab_stats:
+            self.bill_statistics_page()
+        with tab_query:
+            self.query_bills_page()
+        with tab_annual:
+            self.annual_overview_page()
+
     def run(self):
         """运行Streamlit应用"""
-        # 检查登录状态
         if not st.session_state.logged_in:
             self.login_page()
             return
-        
+
         st.sidebar.header('💰 金账本')
-        
-        # 页面导航
         menu = st.sidebar.radio(
-            '选择功能', 
-            [
-                '账单录入', 
-                '支付宝账单导入',
-                '微信账单导入',
-                '财务看板', 
-                '账单统计', 
-                '账单查询', 
-                '年度总览',
-                '数据备份与恢复'
-            ]
+            '功能',
+            ['录入', '报表分析', '数据备份与恢复'],
+            key='main_menu',
         )
-        
-        # 备份页使用独立标题与 Tab 布局，避免重复大标题
-        if menu != '数据备份与恢复':
-            st.title('💰 金账本')
-        
-        if menu == '账单录入':
-            self.record_bill_page()
-        elif menu == '支付宝账单导入':
-            self.alipay_import_page()
-        elif menu == '微信账单导入':
-            self.wechat_import_page()
-        elif menu == '财务看板':
-            self.dashboard_page()
-        elif menu == '账单统计':
-            self.bill_statistics_page()
-        elif menu == '账单查询':
-            self.query_bills_page()
-        elif menu == '年度总览':
-            self.annual_overview_page()
-        elif menu == '数据备份与恢复':
-            self.data_backup_page()
-        
-        st.sidebar.text(f'欢迎，{st.session_state.username}')
-        if st.sidebar.button('退出登录'):
+
+        st.sidebar.divider()
+        st.sidebar.caption(f'欢迎，{st.session_state.username}')
+        if st.sidebar.button('退出登录', use_container_width=True):
             st.session_state.logged_in = False
             st.session_state.username = None
             st.rerun()
+
+        if menu == '录入':
+            st.markdown('<h2 class="module-title">📝 录入</h2>', unsafe_allow_html=True)
+            self._input_module_page()
+        elif menu == '报表分析':
+            st.markdown('<h2 class="module-title">📊 报表分析</h2>', unsafe_allow_html=True)
+            self._report_module_page()
+        else:
+            self.data_backup_page()
     
     def record_bill_page(self):
         """记录账单页面"""
-        st.header('录入账单')
-        
         # 检查是否有上一次操作的消息
         if 'bill_message' in st.session_state:
             st.info(st.session_state.bill_message)
@@ -271,13 +328,15 @@ class BillTrackerApp:
     
     def bill_statistics_page(self):
         """账单统计页面"""
-        st.header('账单统计')
-        
-        # 获取当前年份
         current_year = datetime.now().year
-        
-        # 选择统计维度
-        statistic_type = st.selectbox('统计维度', ['年度统计', '月度统计', '类别统计'])
+        with st.container(border=True):
+            st.markdown('##### 统计维度')
+            statistic_type = st.selectbox(
+                '选择维度',
+                ['年度统计', '月度统计', '类别统计'],
+                key='stats_dimension',
+                label_visibility='collapsed',
+            )
         
         try:
             # 年度统计
@@ -426,34 +485,26 @@ class BillTrackerApp:
     
     def query_bills_page(self):
         """账单查询页面"""
-        st.header('账单查询')
-        
-        # 查询条件
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            start_date = st.date_input('开始日期', 
-                datetime(2024, 1, 1), key='query_start')
-            bill_type = st.selectbox('账单类型', 
-                ['全部', '支出', '收入'], key='query_type')
-        
-        with col2:
-            end_date = st.date_input('结束日期', 
-                datetime.now(), key='query_end')
-            bill_categories = st.multiselect(
-                '账单分类（可多选）', 
-                [category.value for category in BillCategory.Expense] + 
-                [category.value for category in BillCategory.Income], 
-                key='query_category'
-            )
-        
-        with col3:
-            min_amount = st.number_input('最小金额', min_value=0.0, step=0.1, key='query_min')
-            max_amount = st.number_input('最大金额', min_value=0.0, step=0.1, key='query_max')
-        
-        remark = st.text_input('备注关键词')
-        
-        if st.button('查询'):
+        with st.container(border=True):
+            st.markdown('##### 筛选条件')
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                start_date = st.date_input('开始日期', datetime(2024, 1, 1), key='query_start')
+                bill_type = st.selectbox('账单类型', ['全部', '支出', '收入'], key='query_type')
+            with col2:
+                end_date = st.date_input('结束日期', datetime.now(), key='query_end')
+                bill_categories = st.multiselect(
+                    '账单分类（可多选）',
+                    [c.value for c in BillCategory.Expense] + [c.value for c in BillCategory.Income],
+                    key='query_category',
+                )
+            with col3:
+                min_amount = st.number_input('最小金额', min_value=0.0, step=0.1, key='query_min')
+                max_amount = st.number_input('最大金额', min_value=0.0, step=0.1, key='query_max')
+            remark = st.text_input('备注关键词', key='query_remark')
+            submitted = st.button('查询', type='primary', key='query_bills_btn')
+
+        if submitted:
             try:
                 # 准备查询参数
                 query_params = {
@@ -492,31 +543,36 @@ class BillTrackerApp:
                 bills = self.db.query_bills(**query_params)
                 
                 if not bills.empty:
-                    st.dataframe(bills)
-                    
-                    # 查询结果统计
-                    st.subheader('查询结果统计')
                     col1, col2, col3 = st.columns(3)
-                    
                     with col1:
-                        st.metric('总记录数', len(bills))
-                    
+                        with st.container(border=True):
+                            st.metric('总记录数', f'{len(bills):,}')
                     with col2:
-                        st.metric('总金额', f'¥ {bills["amount"].sum():.2f}')
-                    
+                        with st.container(border=True):
+                            st.metric('总金额', f'¥ {bills["amount"].sum():,.2f}')
                     with col3:
-                        st.metric('平均金额', f'¥ {bills["amount"].mean():.2f}')
+                        with st.container(border=True):
+                            st.metric('平均金额', f'¥ {bills["amount"].mean():,.2f}')
+                    st.markdown('<p class="section-title">查询结果</p>', unsafe_allow_html=True)
+                    st.dataframe(bills, use_container_width=True, hide_index=True)
                 else:
-                    st.warning('未找到匹配的账单')
+                    st.markdown(
+                        '<div class="empty-hint">未找到匹配的账单，请调整筛选条件后重试</div>',
+                        unsafe_allow_html=True,
+                    )
             except Exception as e:
                 st.error(f'查询失败: {e}')
     
     def dashboard_page(self):
         """财务看板页面"""
-        st.header('财务看板')
-        
-        # 选择周期
-        period_type = st.selectbox('选择统计周期', ['周', '月', '季', '年'])
+        with st.container(border=True):
+            st.markdown('##### 统计周期')
+            period_type = st.selectbox(
+                '选择周期',
+                ['周', '月', '季', '年'],
+                key='dash_period',
+                label_visibility='collapsed',
+            )
         
         # 映射选择到数据库查询类型
         period_map = {
@@ -631,75 +687,101 @@ class BillTrackerApp:
         except Exception as e:
             st.error(f'财务看板获取失败: {e}')
     
+    def _fetch_annual_overview(self, selected_year, page, page_size):
+        summary = self.db.get_annual_summary(selected_year)
+        bills_result = self.db.get_bills_by_year(selected_year, int(page), int(page_size))
+        return {
+            'year': selected_year,
+            'page': int(page),
+            'page_size': int(page_size),
+            'summary': summary,
+            'bills_result': bills_result,
+        }
+
+    def _render_kpi_metrics(self, summary):
+        """三列 KPI 指标卡"""
+        m1, m2, m3 = st.columns(3)
+        with m1:
+            with st.container(border=True):
+                st.markdown('<div class="kpi-income">', unsafe_allow_html=True)
+                st.metric('总收入', f'¥ {summary["income"]:,.2f}')
+        with m2:
+            with st.container(border=True):
+                st.markdown('<div class="kpi-expense">', unsafe_allow_html=True)
+                st.metric('总支出', f'¥ {abs(summary["expense"]):,.2f}')
+        with m3:
+            with st.container(border=True):
+                st.markdown('<div class="kpi-net">', unsafe_allow_html=True)
+                st.metric('净收益', f'¥ {summary["net"]:,.2f}')
+
     def annual_overview_page(self):
         """年度总览页面"""
-        st.header('年度财务总览')
-        
-        # 获取当前年份
         current_year = datetime.now().year
-        
-        # 选择年份
-        selected_year = st.selectbox('选择年份', 
-            list(range(current_year, current_year - 5, -1)), 
-            index=0
-        )
-        
-        # 默认每页记录数和页码
-        page_size = st.sidebar.selectbox('每页记录数', [10, 20, 50, 100], index=0)
-        page = st.sidebar.number_input('页码', min_value=1, value=1)
-        
-        # 查询按钮
-        if st.sidebar.button('查询'):
+        year_options = list(range(current_year, current_year - 5, -1))
+
+        if 'annual_last_result' not in st.session_state:
+            st.session_state.annual_last_result = None
+
+        with st.container(border=True):
+            st.markdown('##### 查询条件')
+            c1, c2, c3, c4 = st.columns([1.2, 1, 1, 0.8])
+            with c1:
+                selected_year = st.selectbox('年份', year_options, index=0, key='annual_year')
+            with c2:
+                page_size = st.selectbox('每页', [10, 20, 50, 100], index=0, key='annual_page_size')
+            with c3:
+                page = st.number_input('页码', min_value=1, value=1, step=1, key='annual_page')
+            with c4:
+                st.markdown('<div style="height:1.6rem"></div>', unsafe_allow_html=True)
+                submitted = st.button('查询', type='primary', use_container_width=True, key='annual_query_btn')
+
+        if submitted:
             try:
-                # 获取年度财务总结
-                summary = self.db.get_annual_summary(selected_year)
-                
-                # 显示年度总览
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric('总收入', f'¥ {summary["income"]:.2f}')
-                with col2:
-                    st.metric('总支出', f'¥ {summary["expense"]:.2f}')
-                with col3:
-                    st.metric('净收益', f'¥ {summary["net"]:.2f}')
-                
-                # 获取指定年份的分页账单
-                bills_result = self.db.get_bills_by_year(selected_year, page, page_size)
-                bills = bills_result['data']
-                
-                # 如果没有账单数据
-                if bills.empty:
-                    st.warning(f'{selected_year}年没有账单记录')
-                    return
-                
-                # 详细账单表格
-                st.subheader('账单明细')
-                st.dataframe(bills[['bill_date', 'type', 'category', 'amount', 'remark']])
-                
-                # 分页控件（放在底部）
-                st.markdown('---')  # 添加分隔线
-                
-                # 分页控件 - 横向布局
-                col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 2])
-                
-                with col2:
-                    st.write(f'每页 {page_size} 条')
-                
-                with col3:
-                    st.write(f'第 {page} 页')
-                
-                with col4:
-                    st.write(f"共 {bills_result['total_count']} 条")
-            
+                with st.spinner('加载中...'):
+                    st.session_state.annual_last_result = self._fetch_annual_overview(
+                        selected_year, page, page_size
+                    )
             except Exception as e:
                 st.error(f'年度总览获取失败: {e}')
-        else:
-            st.info('请在侧边栏选择查询条件并点击查询按钮')
+                return
+
+        result = st.session_state.annual_last_result
+        if not result:
+            st.markdown(
+                '<div class="empty-hint">📅 选择年份与分页后，点击「查询」查看年度汇总与明细</div>',
+                unsafe_allow_html=True,
+            )
+            return
+
+        summary = result['summary']
+        bills_result = result['bills_result']
+        bills = bills_result['data']
+        selected_year = result['year']
+        page_size = result['page_size']
+        page = result['page']
+
+        self._render_kpi_metrics(summary)
+
+        st.subheader(f'{selected_year} 年账单明细')
+        if bills.empty:
+            st.markdown(
+                f'<div class="empty-hint">暂无 {selected_year} 年的账单数据<br><span style="font-size:0.85rem">'
+                f'可尝试其他年份，或先在「录入」中添加账单</span></div>',
+                unsafe_allow_html=True,
+            )
+            return
+
+        st.dataframe(
+            bills[['bill_date', 'type', 'category', 'amount', 'remark']],
+            use_container_width=True,
+            hide_index=True,
+        )
+        total = bills_result['total_count']
+        total_pages = max(1, (total + page_size - 1) // page_size)
+        st.caption(f'第 {page} / {total_pages} 页 · 每页 {page_size} 条 · 共 {total:,} 条')
     
     def alipay_import_page(self):
         """支付宝账单导入页面"""
-        st.header('支付宝账单导入')
-        
         # 使用说明
         with st.expander('📋 使用说明'):
             st.markdown("""
@@ -965,8 +1047,6 @@ class BillTrackerApp:
     
     def wechat_import_page(self):
         """微信账单导入页面"""
-        st.header('微信账单导入')
-        
         # 使用说明
         with st.expander('📋 使用说明'):
             st.markdown("""
