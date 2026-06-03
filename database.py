@@ -1,9 +1,14 @@
 import pymongo
+from bson import ObjectId
+from bson.errors import InvalidId
 from datetime import datetime
 import pandas as pd
 from loguru import logger
 import os
 import re
+import json
+import glob
+import shutil
 from bill_types import BillCategory
 from datetime import timedelta
 from dateutil.relativedelta import relativedelta
@@ -28,6 +33,35 @@ logger.add(os.path.join(log_dir, 'bill_database_{time:YYYY-MM-DD}.log'),
            level='INFO',  # 日志级别
            format="{time} | {level} | IP: {extra[ip]} | {message}"  # 自定义日志格式
 )
+
+TARGET_DB_NAME = 'bill_tracker'
+BACKUP_VERSION = '2.1'
+RESTORE_MODE_BILLS_ONLY = 'bills_only'
+RESTORE_MODE_FULL_REPLACE = 'full_replace'
+RESTORE_MODE_MERGE = 'merge'
+
+
+def get_data_root():
+    """数据根目录（Docker 一般为 /app/data）"""
+    base = os.path.dirname(os.path.abspath(__file__))
+    return os.getenv('DATA_DIR', os.path.join(base, 'data'))
+
+
+def get_snapshots_dir():
+    return os.path.join(get_data_root(), 'snapshots')
+
+
+def get_pre_restore_dir():
+    return os.path.join(get_data_root(), 'pre_restore')
+
+
+def get_yearly_dir():
+    return os.path.join(get_data_root(), 'yearly')
+
+
+def get_manifest_path():
+    return os.path.join(get_data_root(), 'manifest.json')
+
 
 class BillDatabase:
     def __init__(self, host=None, port=27017, db_name=None):
@@ -699,28 +733,72 @@ class BillDatabase:
             logger.error(f"获取数据哈希失败: {e}")
             return None
     
-    def cleanup_old_backups(self, backup_dir, max_backups=5):
+    def _ensure_data_layout(self):
+        """创建 data 子目录，并将旧版 data/*.json 迁移到 snapshots/"""
+        data_root = get_data_root()
+        snapshots_dir = get_snapshots_dir()
+        os.makedirs(snapshots_dir, exist_ok=True)
+        os.makedirs(get_pre_restore_dir(), exist_ok=True)
+        os.makedirs(get_yearly_dir(), exist_ok=True)
+
+        for path in glob.glob(os.path.join(data_root, 'bills_backup_*.json')):
+            dest = os.path.join(snapshots_dir, os.path.basename(path))
+            if not os.path.exists(dest):
+                try:
+                    shutil.move(path, dest)
+                    logger.info(f"已迁移旧备份: {os.path.basename(path)} -> snapshots/")
+                except Exception as e:
+                    logger.warning(f"迁移旧备份失败 {path}: {e}")
+
+    def _write_manifest(self, event_type, **payload):
+        """记录最近一次备份/恢复操作"""
+        try:
+            manifest = {}
+            manifest_path = get_manifest_path()
+            if os.path.exists(manifest_path):
+                with open(manifest_path, 'r', encoding='utf-8') as f:
+                    manifest = json.load(f)
+            manifest[event_type] = {
+                'time': datetime.now().isoformat(),
+                **payload
+            }
+            with open(manifest_path, 'w', encoding='utf-8') as f:
+                json.dump(manifest, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.warning(f"写入 manifest 失败: {e}")
+
+    def _bills_date_range(self, documents):
+        dates = [str(d.get('bill_date')) for d in documents if d.get('bill_date')]
+        if not dates:
+            return None, None
+        return min(dates), max(dates)
+
+    def _doc_for_mongo(self, doc):
+        """将备份 JSON 中的文档还原为可写入 MongoDB 的格式"""
+        doc = dict(doc)
+        if '_id' in doc and isinstance(doc['_id'], str):
+            try:
+                doc['_id'] = ObjectId(doc['_id'])
+            except (InvalidId, TypeError):
+                del doc['_id']
+        return doc
+
+    def cleanup_old_backups(self, backup_dir, max_backups=5, filename_pattern='bills_backup_*.json'):
         """
         清理旧的备份文件，只保留最新的几份
         
         :param backup_dir: 备份目录
         :param max_backups: 最大保留备份数量
+        :param filename_pattern: 匹配文件名模式
         """
         try:
-            import glob
-            import os
-            
-            # 获取所有备份文件
-            backup_pattern = os.path.join(backup_dir, 'bills_backup_*.json')
+            backup_pattern = os.path.join(backup_dir, filename_pattern)
             backup_files = glob.glob(backup_pattern)
             
             if len(backup_files) <= max_backups:
                 return
             
-            # 按修改时间排序，最新的在前
             backup_files.sort(key=os.path.getmtime, reverse=True)
-            
-            # 删除多余的备份文件
             files_to_delete = backup_files[max_backups:]
             for file_path in files_to_delete:
                 try:
@@ -792,13 +870,13 @@ class BillDatabase:
             import json
             from datetime import datetime
             
-            # 确定备份目录
+            self._ensure_data_layout()
+
             if backup_path:
                 backup_dir = os.path.dirname(backup_path)
             else:
-                backup_dir = '/app/data'
+                backup_dir = get_snapshots_dir()
             
-            # 确保备份目录存在
             os.makedirs(backup_dir, exist_ok=True)
             
             # 检查是否需要备份（除非强制备份）
@@ -820,35 +898,45 @@ class BillDatabase:
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                 backup_path = os.path.join(backup_dir, f'bills_backup_{timestamp}.json')
             
-            # 只备份bill_tracker数据库
-            target_db_name = 'bill_tracker'
+            target_db_name = TARGET_DB_NAME
             db = self.client[target_db_name]
             collections = db.list_collection_names()
+            collection_stats = {}
             
             backup_data = {
                 'backup_info': {
                     'timestamp': datetime.now().strftime('%Y%m%d_%H%M%S'),
                     'backup_time': datetime.now().isoformat(),
                     'database_name': target_db_name,
-                    'version': '2.0',
-                    'data_hash': current_hash  # 添加数据哈希
+                    'version': BACKUP_VERSION,
+                    'data_hash': current_hash,
+                    'type': (
+                        'pre_restore'
+                        if backup_path and 'pre_restore' in backup_path.replace('\\', '/')
+                        else 'snapshot'
+                    ),
                 },
                 'databases': {}
             }
             
             total_records = 0
-            
-            # 备份指定数据库
             db_data = {'collections': {}}
             for collection_name in collections:
                 collection = db[collection_name]
                 documents = []
                 
                 for doc in collection.find():
-                    # 转换ObjectId为字符串
+                    doc = dict(doc)
                     if '_id' in doc:
                         doc['_id'] = str(doc['_id'])
                     documents.append(doc)
+                
+                stat = {'count': len(documents)}
+                if collection_name == 'bills':
+                    min_d, max_d = self._bills_date_range(documents)
+                    stat['bill_date_min'] = min_d
+                    stat['bill_date_max'] = max_d
+                collection_stats[collection_name] = stat
                 
                 db_data['collections'][collection_name] = {
                     'count': len(documents),
@@ -857,6 +945,7 @@ class BillDatabase:
                 total_records += len(documents)
                 logger.info(f"备份集合 {target_db_name}.{collection_name}: {len(documents)} 条记录")
             
+            backup_data['backup_info']['collection_stats'] = collection_stats
             backup_data['databases'][target_db_name] = db_data
             
             # 写入备份文件
@@ -867,9 +956,12 @@ class BillDatabase:
             file_size = os.path.getsize(backup_path)
             file_size_mb = file_size / (1024 * 1024)
             
-            # 清理旧备份文件
-            self.cleanup_old_backups(backup_dir, max_backups=5)
-            
+            if 'pre_restore' in backup_dir:
+                self.cleanup_old_backups(backup_dir, max_backups=5, filename_pattern='pre_restore_*.json')
+            else:
+                self.cleanup_old_backups(backup_dir, max_backups=5, filename_pattern='bills_backup_*.json')
+                self._write_manifest('last_backup', path=backup_path, documents=total_records)
+
             logger.info(f"数据备份完成: {backup_path}, 共{total_records}条记录, 文件大小: {file_size_mb:.2f}MB")
             
             return {
@@ -881,7 +973,8 @@ class BillDatabase:
                 'file_size': file_size,
                 'file_size_mb': round(file_size_mb, 2),
                 'data_hash': current_hash,
-                'skipped': False
+                'skipped': False,
+                'collection_stats': collection_stats
             }
             
         except Exception as e:
@@ -891,6 +984,184 @@ class BillDatabase:
                 'message': f'备份失败: {str(e)}',
                 'error': str(e)
             }
+
+    def parse_backup_file(self, backup_path):
+        """
+        解析备份文件元数据（用于预览，不写入数据库）
+
+        :return: 元数据字典，失败时 success=False
+        """
+        try:
+            if not os.path.exists(backup_path):
+                return {'success': False, 'message': '备份文件不存在'}
+
+            with open(backup_path, 'r', encoding='utf-8') as f:
+                backup_data = json.load(f)
+
+            info = backup_data.get('backup_info', {})
+            db_data = backup_data.get('databases', {}).get(TARGET_DB_NAME, {})
+            collections = db_data.get('collections', {})
+            total = sum(c.get('count', 0) for c in collections.values())
+            file_size_mb = os.path.getsize(backup_path) / (1024 * 1024)
+
+            return {
+                'success': True,
+                'backup_path': backup_path,
+                'file_name': os.path.basename(backup_path),
+                'backup_time': info.get('backup_time'),
+                'version': info.get('version'),
+                'backup_type': info.get('type', 'snapshot'),
+                'collection_stats': info.get('collection_stats') or {
+                    name: {'count': col.get('count', 0)} for name, col in collections.items()
+                },
+                'total_documents': total,
+                'file_size_mb': round(file_size_mb, 2),
+                'collections': list(collections.keys()),
+            }
+        except Exception as e:
+            logger.error(f"解析备份文件失败: {e}")
+            return {'success': False, 'message': str(e)}
+
+    def list_backup_files(self, include_pre_restore=False):
+        """列出可恢复的备份文件（snapshots，可选含 pre_restore）"""
+        self._ensure_data_layout()
+        files = []
+
+        for pattern_dir, label in [
+            (get_snapshots_dir(), 'snapshot'),
+            (get_pre_restore_dir(), 'pre_restore'),
+        ]:
+            if label == 'pre_restore' and not include_pre_restore:
+                continue
+            pattern = os.path.join(
+                pattern_dir,
+                'bills_backup_*.json' if label == 'snapshot' else 'pre_restore_*.json'
+            )
+            for path in glob.glob(pattern):
+                meta = self.parse_backup_file(path)
+                if meta.get('success'):
+                    meta['category'] = label
+                    files.append(meta)
+
+        files.sort(key=lambda x: os.path.getmtime(x['backup_path']), reverse=True)
+        return files
+
+    def create_pre_restore_snapshot(self):
+        """恢复前自动全量快照"""
+        self._ensure_data_layout()
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        backup_path = os.path.join(get_pre_restore_dir(), f'pre_restore_{timestamp}.json')
+        return self.backup_all_data(backup_path=backup_path, force=True)
+
+    def restore_from_backup(self, backup_path, mode=RESTORE_MODE_BILLS_ONLY, include_users=False):
+        """
+        从 JSON 备份恢复数据
+
+        :param backup_path: 备份文件路径
+        :param mode: bills_only | full_replace | merge
+        :param include_users: full_replace 时是否恢复 users 集合（默认 False）
+        :return: 恢复结果字典
+        """
+        try:
+            if mode not in (RESTORE_MODE_BILLS_ONLY, RESTORE_MODE_FULL_REPLACE, RESTORE_MODE_MERGE):
+                return {'success': False, 'message': f'不支持的恢复模式: {mode}'}
+
+            preview = self.parse_backup_file(backup_path)
+            if not preview.get('success'):
+                return preview
+
+            pre = self.create_pre_restore_snapshot()
+            if not pre.get('success'):
+                return {
+                    'success': False,
+                    'message': f"恢复前自动备份失败: {pre.get('message')}",
+                    'pre_restore': pre
+                }
+
+            with open(backup_path, 'r', encoding='utf-8') as f:
+                backup_data = json.load(f)
+
+            db_payload = backup_data.get('databases', {}).get(TARGET_DB_NAME)
+            if not db_payload:
+                return {'success': False, 'message': f'备份中未找到数据库 {TARGET_DB_NAME}'}
+
+            collections_data = db_payload.get('collections', {})
+            db = self.client[TARGET_DB_NAME]
+            stats = {'inserted': 0, 'updated': 0, 'deleted': 0, 'collections': {}}
+
+            if mode == RESTORE_MODE_BILLS_ONLY:
+                target_collections = ['bills']
+            elif mode == RESTORE_MODE_FULL_REPLACE:
+                target_collections = list(collections_data.keys())
+                if not include_users and 'users' in target_collections:
+                    target_collections.remove('users')
+            else:
+                target_collections = list(collections_data.keys())
+                if not include_users and 'users' in target_collections:
+                    target_collections.remove('users')
+
+            for coll_name in target_collections:
+                if coll_name not in collections_data:
+                    continue
+
+                documents = collections_data[coll_name].get('documents', [])
+                collection = db[coll_name]
+                coll_stat = {'inserted': 0, 'updated': 0, 'deleted': 0}
+
+                if mode in (RESTORE_MODE_BILLS_ONLY, RESTORE_MODE_FULL_REPLACE):
+                    deleted = collection.delete_many({}).deleted_count
+                    coll_stat['deleted'] = deleted
+                    stats['deleted'] += deleted
+
+                    if documents:
+                        mongo_docs = [self._doc_for_mongo(d) for d in documents]
+                        result = collection.insert_many(mongo_docs)
+                        coll_stat['inserted'] = len(result.inserted_ids)
+                        stats['inserted'] += coll_stat['inserted']
+
+                elif mode == RESTORE_MODE_MERGE:
+                    for raw in documents:
+                        doc = self._doc_for_mongo(raw)
+                        doc_id = doc.get('_id')
+                        if doc_id is None:
+                            collection.insert_one(doc)
+                            coll_stat['inserted'] += 1
+                            stats['inserted'] += 1
+                        else:
+                            res = collection.replace_one({'_id': doc_id}, doc, upsert=True)
+                            if res.upserted_id:
+                                coll_stat['inserted'] += 1
+                                stats['inserted'] += 1
+                            elif res.modified_count:
+                                coll_stat['updated'] += 1
+                                stats['updated'] += 1
+
+                stats['collections'][coll_name] = coll_stat
+                logger.info(f"恢复集合 {coll_name}: {coll_stat}")
+
+            self._write_manifest(
+                'last_restore',
+                path=backup_path,
+                mode=mode,
+                include_users=include_users,
+                pre_restore_path=pre.get('backup_path'),
+                stats=stats
+            )
+
+            return {
+                'success': True,
+                'message': '恢复完成',
+                'mode': mode,
+                'include_users': include_users,
+                'backup_path': backup_path,
+                'pre_restore_path': pre.get('backup_path'),
+                'stats': stats,
+                'preview': preview
+            }
+
+        except Exception as e:
+            logger.error(f"数据恢复失败: {e}")
+            return {'success': False, 'message': f'恢复失败: {str(e)}', 'error': str(e)}
 
     def close(self):
         """

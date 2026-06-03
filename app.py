@@ -2,7 +2,13 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
-from database import BillDatabase
+from database import (
+    BillDatabase,
+    get_data_root,
+    RESTORE_MODE_BILLS_ONLY,
+    RESTORE_MODE_FULL_REPLACE,
+    RESTORE_MODE_MERGE,
+)
 from datetime import datetime
 from bill_types import BillCategory
 from loguru import logger
@@ -167,11 +173,13 @@ class BillTrackerApp:
                 '账单统计', 
                 '账单查询', 
                 '年度总览',
-                '数据备份'
+                '数据备份与恢复'
             ]
         )
         
-        st.title('💰 金账本')
+        # 备份页使用独立标题与 Tab 布局，避免重复大标题
+        if menu != '数据备份与恢复':
+            st.title('💰 金账本')
         
         if menu == '账单录入':
             self.record_bill_page()
@@ -187,7 +195,7 @@ class BillTrackerApp:
             self.query_bills_page()
         elif menu == '年度总览':
             self.annual_overview_page()
-        elif menu == '数据备份':
+        elif menu == '数据备份与恢复':
             self.data_backup_page()
         
         st.sidebar.text(f'欢迎，{st.session_state.username}')
@@ -1251,230 +1259,232 @@ class BillTrackerApp:
                 st.error(f"文件处理失败：{str(e)}")
                 logger.error(f"微信账单导入失败: {e}")
     
-    def data_backup_page(self):
-        """数据备份页面"""
-        st.header('📦 数据备份')
-        
-        st.markdown("""
-        ### 功能说明
-        - 智能备份bill_tracker数据库中的数据到JSON文件
-        - 只有数据发生变化时才会创建新备份（增量检测）
-        - 自动保留最新的5份备份文件，删除旧备份
-        - 备份文件保存在data目录下，带有时间戳
-        - 可以用于数据迁移和恢复
-        """)
-        
-        # 显示当前数据库状态
-        try:
-            # 只显示bill_tracker数据库的统计信息
-            target_db_name = 'bill_tracker'
-            
-            st.subheader('📊 当前数据库状态')
-            
-            total_documents = 0
-            db = self.db.client[target_db_name]
-            collections = db.list_collection_names()
-            
-            with st.expander(f"数据库: {target_db_name}", expanded=True):
-                for collection_name in collections:
-                    collection = db[collection_name]
-                    count = collection.count_documents({})
-                    total_documents += count
-                    st.write(f"📄 {collection_name}: {count:,} 条记录")
-            
-            st.metric("总记录数", f"{total_documents:,}")
-            
-        except Exception as e:
-            st.error(f"获取数据库状态失败: {e}")
-        
-        st.divider()
-        
-        # 备份操作
-        st.subheader('🔄 执行备份')
-        
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            st.info("点击下方按钮开始智能备份bill_tracker数据库（仅在数据变化时备份）")
-        
-        with col2:
-            col2_1, col2_2 = st.columns(2)
-            
-            with col2_1:
-                if st.button('🚀 智能备份', type='primary'):
-                    try:
-                        with st.spinner('正在检查数据变化并备份...'):
-                            # 执行智能备份
-                            backup_result = self.db.backup_all_data(force=False)
-                            
-                            if backup_result.get('skipped', False):
-                                st.info('ℹ️ 数据未发生变化，跳过备份')
-                                st.write(f"当前数据哈希: `{backup_result.get('current_hash', 'N/A')}`")
-                            else:
-                                st.success('✅ 备份完成！')
-                                
-                                # 显示备份信息
-                                st.subheader('📋 备份详情')
-                                
-                                col1, col2, col3 = st.columns(3)
-                                
-                                with col1:
-                                    st.metric("备份数据库数", backup_result.get('total_databases', 1))
-                                
-                                with col2:
-                                    st.metric("备份记录数", f"{backup_result.get('total_documents', 0):,}")
-                                
-                                with col3:
-                                    st.metric("文件大小", f"{backup_result.get('file_size_mb', 0)} MB")
-                                
-                                st.info(f"📁 备份文件: `{os.path.basename(backup_result.get('backup_path', ''))}`")
-                                st.info(f"🔍 数据哈希: `{backup_result.get('data_hash', 'N/A')}`")
-                                
-                                # 提供下载链接
-                                try:
-                                    backup_path = backup_result.get('backup_path')
-                                    if backup_path and os.path.exists(backup_path):
-                                        with open(backup_path, 'rb') as f:
-                                            st.download_button(
-                                                label="📥 下载备份文件",
-                                                data=f.read(),
-                                                file_name=os.path.basename(backup_path),
-                                                mime="application/json"
-                                            )
-                                except Exception as download_error:
-                                    st.warning(f"无法提供下载链接: {download_error}")
-                            
-                    except Exception as e:
-                        st.error(f"备份失败: {e}")
-                        logger.error(f"智能备份失败: {e}")
-            
-            with col2_2:
-                if st.button('🔄 强制备份', help="忽略数据变化检测，强制创建备份"):
-                    try:
-                        with st.spinner('正在强制备份数据...'):
-                            # 执行强制备份
-                            backup_result = self.db.backup_all_data(force=True)
-                            
-                            st.success('✅ 强制备份完成！')
-                            
-                            # 显示备份信息
-                            st.subheader('📋 备份详情')
-                            
-                            col1, col2, col3 = st.columns(3)
-                            
-                            with col1:
-                                st.metric("备份数据库数", backup_result.get('total_databases', 1))
-                            
-                            with col2:
-                                st.metric("备份记录数", f"{backup_result.get('total_documents', 0):,}")
-                            
-                            with col3:
-                                st.metric("文件大小", f"{backup_result.get('file_size_mb', 0)} MB")
-                            
-                            st.info(f"📁 备份文件: `{os.path.basename(backup_result.get('backup_path', ''))}`")
-                            st.info(f"🔍 数据哈希: `{backup_result.get('data_hash', 'N/A')}`")
-                            
-                            # 提供下载链接
-                            try:
-                                backup_path = backup_result.get('backup_path')
-                                if backup_path and os.path.exists(backup_path):
-                                    with open(backup_path, 'rb') as f:
-                                        st.download_button(
-                                            label="📥 下载备份文件",
-                                            data=f.read(),
-                                            file_name=os.path.basename(backup_path),
-                                            mime="application/json"
-                                        )
-                            except Exception as download_error:
-                                st.warning(f"无法提供下载链接: {download_error}")
-                            
-                    except Exception as e:
-                        st.error(f"强制备份失败: {e}")
-                        logger.error(f"强制备份失败: {e}")
-        
-        st.divider()
-        
-        # 显示历史备份文件
-        st.subheader('📚 历史备份文件 (最多显示5个)')
-        
-        try:
-            import os
-            import glob
-            from datetime import datetime
-            
-            data_dir = '/app/data'  # 使用容器内的路径
-            if os.path.exists(data_dir):
-                backup_files = glob.glob(os.path.join(data_dir, 'bills_backup_*.json'))
-                backup_files.sort(key=os.path.getmtime, reverse=True)  # 按修改时间倒序
-                
-                if backup_files:
-                    st.write(f"共找到 {len(backup_files)} 个备份文件")
-                    
-                    # 显示表头
-                    col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-                    with col1:
-                        st.write("**文件名**")
-                    with col2:
-                        st.write("**大小**")
-                    with col3:
-                        st.write("**创建时间**")
-                    with col4:
-                        st.write("**操作**")
-                    
-                    st.divider()
-                    
-                    for i, backup_file in enumerate(backup_files[:5]):  # 只显示最新5个
-                        file_name = os.path.basename(backup_file)
-                        file_size = os.path.getsize(backup_file)
-                        file_size_mb = file_size / (1024 * 1024)
-                        
-                        # 从文件名提取时间戳
-                        timestamp_str = file_name.replace('bills_backup_', '').replace('.json', '')
-                        try:
-                            timestamp = datetime.strptime(timestamp_str, '%Y%m%d_%H%M%S')
-                            time_str = timestamp.strftime('%Y-%m-%d %H:%M:%S')
-                        except:
-                            time_str = timestamp_str
-                        
-                        col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-                        
-                        with col1:
-                            # 标记最新的备份
-                            if i == 0:
-                                st.write(f"🆕 {file_name}")
-                            else:
-                                st.write(f"📄 {file_name}")
-                        
-                        with col2:
-                            st.write(f"{file_size_mb:.2f} MB")
-                        
-                        with col3:
-                            st.write(time_str)
-                        
-                        with col4:
-                            # 提供下载按钮
-                            try:
-                                with open(backup_file, 'rb') as f:
-                                    st.download_button(
-                                        label="📥",
-                                        data=f.read(),
-                                        file_name=file_name,
-                                        mime="application/json",
-                                        key=f"download_{i}",
-                                        help="下载此备份文件"
-                                    )
-                            except Exception as e:
-                                st.write("❌")
-                    
-                    if len(backup_files) > 5:
-                        st.info(f"还有 {len(backup_files) - 5} 个较旧的备份文件未显示")
+    def _render_backup_db_status(self):
+        """备份页：当前库状态"""
+        target_db_name = 'bill_tracker'
+        total_documents = 0
+        db = self.db.client[target_db_name]
+        collections = db.list_collection_names()
+
+        cols = st.columns(min(len(collections) + 1, 4))
+        for i, collection_name in enumerate(collections):
+            count = db[collection_name].count_documents({})
+            total_documents += count
+            with cols[i % len(cols)]:
+                st.metric(collection_name, f"{count:,} 条")
+        with cols[-1]:
+            st.metric('合计', f"{total_documents:,} 条")
+
+    def _render_backup_result(self, backup_result, *, skipped_ok=False):
+        """备份页：展示单次备份结果"""
+        if backup_result.get('skipped', False):
+            if skipped_ok:
+                st.info('数据未发生变化，已跳过备份')
+                st.caption(f"哈希: `{backup_result.get('current_hash', 'N/A')}`")
+            return
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.metric('记录数', f"{backup_result.get('total_documents', 0):,}")
+        with c2:
+            st.metric('大小', f"{backup_result.get('file_size_mb', 0)} MB")
+        with c3:
+            st.metric('数据库', backup_result.get('total_databases', 1))
+
+        path = backup_result.get('backup_path')
+        if path:
+            st.caption(f"文件: `{os.path.basename(path)}` · 哈希: `{backup_result.get('data_hash', 'N/A')}`")
+            if os.path.exists(path):
+                with open(path, 'rb') as f:
+                    st.download_button(
+                        '📥 下载此备份',
+                        data=f.read(),
+                        file_name=os.path.basename(path),
+                        mime='application/json',
+                        key=f"dl_{os.path.basename(path)}_{backup_result.get('data_hash', '')[:8]}",
+                    )
+
+    def _backup_tab_content(self):
+        st.caption('仅在数据有变化时创建新快照；文件保存在 `data/snapshots/`，最多保留 5 份。')
+        left, right = st.columns([1, 1])
+        with left:
+            st.markdown('##### 智能备份')
+            st.write('检测哈希变化，无变化则跳过。')
+            if st.button('🚀 开始智能备份', type='primary', use_container_width=True, key='btn_smart_backup'):
+                try:
+                    with st.spinner('检查并备份...'):
+                        result = self.db.backup_all_data(force=False)
+                    if result.get('success'):
+                        st.success('完成' if not result.get('skipped') else '无需新备份')
+                        self._render_backup_result(result, skipped_ok=True)
+                    else:
+                        st.error(result.get('message', '备份失败'))
+                except Exception as e:
+                    st.error(f'备份失败: {e}')
+        with right:
+            st.markdown('##### 强制备份')
+            st.write('忽略变化检测，立即生成快照。')
+            if st.button('🔄 强制备份', use_container_width=True, key='btn_force_backup'):
+                try:
+                    with st.spinner('备份中...'):
+                        result = self.db.backup_all_data(force=True)
+                    if result.get('success'):
+                        st.success('强制备份完成')
+                        self._render_backup_result(result)
+                    else:
+                        st.error(result.get('message', '备份失败'))
+                except Exception as e:
+                    st.error(f'强制备份失败: {e}')
+
+    def _restore_tab_content(self):
+        self.db._ensure_data_layout()
+        snapshot_files = self.db.list_backup_files(include_pre_restore=False)
+        all_files = self.db.list_backup_files(include_pre_restore=True)
+        pre_restore_only = [f for f in all_files if f.get('category') == 'pre_restore']
+
+        if not snapshot_files:
+            st.info('暂无快照，请先在「执行备份」中创建备份。')
+            return
+
+        left, right = st.columns([1, 1])
+        with left:
+            source_options = {
+                f"{f['file_name']}（{f['total_documents']:,} 条）": f['backup_path']
+                for f in snapshot_files
+            }
+            selected_label = st.selectbox('选择快照', options=list(source_options.keys()), key='restore_file_select')
+            backup_path = source_options[selected_label]
+
+            restore_mode = st.radio(
+                '恢复模式',
+                [RESTORE_MODE_BILLS_ONLY, RESTORE_MODE_MERGE, RESTORE_MODE_FULL_REPLACE],
+                format_func=lambda m: {
+                    RESTORE_MODE_BILLS_ONLY: '仅账单（推荐）',
+                    RESTORE_MODE_MERGE: '合并（按 _id）',
+                    RESTORE_MODE_FULL_REPLACE: '整库覆盖',
+                }[m],
+                key='restore_mode_radio',
+            )
+            include_users = False
+            if restore_mode == RESTORE_MODE_FULL_REPLACE:
+                include_users = st.checkbox('同时恢复 users', value=False, key='restore_include_users')
+
+            confirm_text = st.text_input('输入 RESTORE 确认', placeholder='RESTORE', key='restore_confirm_input')
+            if st.button('执行恢复', type='primary', use_container_width=True, key='restore_execute_btn'):
+                if confirm_text != 'RESTORE':
+                    st.error('请输入 RESTORE')
                 else:
-                    st.info("暂无历史备份文件")
-            else:
-                st.info("备份目录不存在")
-                
-        except Exception as e:
-            st.warning(f"无法读取历史备份文件: {e}")
+                    try:
+                        with st.spinner('恢复中（会先自动做 pre_restore）...'):
+                            result = self.db.restore_from_backup(backup_path, mode=restore_mode, include_users=include_users)
+                        if result.get('success'):
+                            st.success('恢复完成')
+                            st.json(result.get('stats', {}))
+                            st.rerun()
+                        else:
+                            st.error(result.get('message', '恢复失败'))
+                    except Exception as e:
+                        st.error(str(e))
+
+        with right:
+            preview = self.db.parse_backup_file(backup_path)
+            if preview.get('success'):
+                st.markdown('##### 快照预览')
+                st.write(f"时间: {preview.get('backup_time', '')[:19].replace('T', ' ')}")
+                st.write(f"记录: {preview['total_documents']:,} · {preview['file_size_mb']} MB")
+                for cname, cstat in (preview.get('collection_stats') or {}).items():
+                    line = f"- **{cname}**: {cstat.get('count', 0):,}"
+                    if cstat.get('bill_date_min'):
+                        line += f" ({cstat['bill_date_min']} ~ {cstat['bill_date_max']})"
+                    st.write(line)
+            st.info('恢复前会自动写入 `data/pre_restore/` 安全快照。')
+
+        if pre_restore_only:
+            st.divider()
+            st.markdown('##### 误操作回滚')
+            rollback_options = {f['file_name']: f['backup_path'] for f in pre_restore_only[:5]}
+            rb_name = st.selectbox('pre_restore 快照', options=list(rollback_options.keys()), key='rollback_select')
+            if st.button('回滚到此快照', key='rollback_btn'):
+                try:
+                    with st.spinner('回滚中...'):
+                        rb_result = self.db.restore_from_backup(
+                            rollback_options[rb_name],
+                            mode=RESTORE_MODE_FULL_REPLACE,
+                            include_users=True,
+                        )
+                    if rb_result.get('success'):
+                        st.success('回滚完成')
+                        st.rerun()
+                    else:
+                        st.error(rb_result.get('message'))
+                except Exception as e:
+                    st.error(str(e))
+
+    def _snapshots_tab_content(self):
+        snapshot_files = self.db.list_backup_files(include_pre_restore=False)
+        if not snapshot_files:
+            st.info(f"暂无快照 · 目录 `{get_data_root()}/snapshots/`")
+            return
+
+        st.caption(f"共 {len(snapshot_files)} 个文件（显示最新 10 个）")
+        for i, meta in enumerate(snapshot_files[:10]):
+            with st.container(border=True):
+                c1, c2, c3, c4 = st.columns([3, 1, 2, 1])
+                with c1:
+                    st.write(f"{'🆕 ' if i == 0 else ''}**{meta['file_name']}**")
+                with c2:
+                    st.write(f"{meta['file_size_mb']} MB")
+                with c3:
+                    st.write(meta.get('backup_time', '')[:19].replace('T', ' '))
+                with c4:
+                    try:
+                        with open(meta['backup_path'], 'rb') as f:
+                            st.download_button('📥', f.read(), meta['file_name'], 'application/json', key=f"snap_dl_{i}")
+                    except Exception:
+                        st.write('—')
+
+    def data_backup_page(self):
+        """数据备份与恢复（Tab 布局）"""
+        st.header('📦 数据备份与恢复')
+
+        tab_overview, tab_backup, tab_restore, tab_files = st.tabs(
+            ['概览', '执行备份', '数据恢复', '快照文件']
+        )
+
+        with tab_overview:
+            st.markdown(
+                """
+| 目录 | 用途 |
+|------|------|
+| `data/snapshots/` | 全量快照，定时/手动备份，保留 5 份 |
+| `data/pre_restore/` | 恢复前自动安全快照 |
+| `data/yearly/` | 按年归档（阶段二） |
+                """
+            )
+            try:
+                self.db._ensure_data_layout()
+                st.markdown('##### 当前数据库')
+                self._render_backup_db_status()
+            except Exception as e:
+                st.error(f'读取库状态失败: {e}')
+
+        with tab_backup:
+            try:
+                self._backup_tab_content()
+            except Exception as e:
+                st.error(f'备份功能异常: {e}')
+
+        with tab_restore:
+            try:
+                self._restore_tab_content()
+            except Exception as e:
+                st.error(f'恢复功能异常: {e}')
+
+        with tab_files:
+            try:
+                self._snapshots_tab_content()
+            except Exception as e:
+                st.warning(f'读取快照列表失败: {e}')
 
 
 def main():
