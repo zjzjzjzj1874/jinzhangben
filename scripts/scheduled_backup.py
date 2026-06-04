@@ -8,19 +8,22 @@
 - 记录备份日志
 
 使用方法：
-1. 直接运行: python scheduled_backup.py
-2. 作为cron任务: 0 2 * * * /usr/bin/python3 /path/to/scheduled_backup.py
-3. Docker环境: docker exec bill-py-streamlit-web-1 python /app/scheduled_backup.py
+1. 直接运行: python scripts/scheduled_backup.py
+2. Docker: python /app/scripts/scheduled_backup.py
 """
 
 import os
 import sys
 import logging
 from datetime import datetime
-from database import BillDatabase
+from pathlib import Path
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOG_DIR = os.getenv('LOG_DIR', os.path.join(BASE_DIR, 'logs'))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from bill_tracker.db import BillDatabase
+from bill_tracker.paths import get_data_root, get_log_dir
+
+LOG_DIR = get_log_dir()
 os.makedirs(LOG_DIR, exist_ok=True)
 LOG_FILE = os.path.join(LOG_DIR, 'scheduled_backup.log')
 
@@ -79,7 +82,7 @@ def check_environment():
     """
     logger.info("检查运行环境...")
     
-    data_dir = os.getenv('DATA_DIR', os.path.join(BASE_DIR, 'data'))
+    data_dir = get_data_root()
     if not os.path.exists(data_dir):
         logger.warning(f"数据目录不存在，尝试创建: {data_dir}")
         try:

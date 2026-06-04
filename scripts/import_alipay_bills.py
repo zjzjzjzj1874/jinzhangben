@@ -4,25 +4,25 @@
 支付宝账单导入脚本
 
 使用方法：
-1. 将支付宝账单CSV文件放在 csv/ali/ 目录下
-2. 运行脚本：python import_alipay_bills.py [文件名]
-3. 如果不指定文件名，将导入 csv/ali/zfb-bill.csv
-
-示例：
-    python import_alipay_bills.py
-    python import_alipay_bills.py my-alipay-bill.csv
+1. 将支付宝账单 CSV 放在 csv/alipay/ 目录下
+2. 运行：python scripts/import_alipay_bills.py [文件名]
+3. 默认文件：csv/alipay/zfb-bill.csv
 """
 
 import sys
 import os
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import pandas as pd
-from datetime import datetime
-from database import BillDatabase
 from loguru import logger
 from dotenv import load_dotenv
-from alipay_bill_processor import AlipayBillProcessor
 
-# 加载环境变量
+from bill_tracker.db import BillDatabase
+from bill_tracker.import_ import AlipayBillProcessor
+from bill_tracker.paths import csv_dir, get_log_dir
+
 load_dotenv()
 
 class AlipayBillImporter:
@@ -32,7 +32,7 @@ class AlipayBillImporter:
         self.processor = AlipayBillProcessor(self.db)
         
         # 配置日志
-        log_dir = os.path.join(os.path.dirname(__file__), 'logs')
+        log_dir = get_log_dir()
         os.makedirs(log_dir, exist_ok=True)
         logger.add(
             os.path.join(log_dir, 'alipay_import_{time:YYYY-MM-DD}.log'),
@@ -138,9 +138,9 @@ def main():
         filename = sys.argv[1]
         if not filename.endswith('.csv'):
             filename += '.csv'
-        file_path = os.path.join('csv', 'ali', filename)
+        file_path = os.path.join(csv_dir('alipay'), filename)
     else:
-        file_path = os.path.join('csv', 'ali', 'zfb-bill.csv')
+        file_path = os.path.join(csv_dir('alipay'), 'zfb-bill.csv')
     
     # 创建导入器并执行导入
     importer = AlipayBillImporter()

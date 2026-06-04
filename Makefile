@@ -21,7 +21,7 @@ rebuild:
 
 # 立即执行一次备份（不等待定时周期）
 backup-once:
-	$(COMPOSE) -f $(COMPOSE_FILE) run --rm backup python scheduled_backup.py
+	$(COMPOSE) -f $(COMPOSE_FILE) run --rm backup python scripts/scheduled_backup.py
 
 backup-logs:
 	$(COMPOSE) -f $(COMPOSE_FILE) logs -f backup

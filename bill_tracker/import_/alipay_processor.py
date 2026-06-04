@@ -8,9 +8,9 @@
 
 import pandas as pd
 from datetime import datetime
-from database import BillDatabase
+from bill_tracker.db import BillDatabase
 from loguru import logger
-from bill_classifier import UniversalBillClassifier
+from bill_tracker.classification import UniversalBillClassifier
 
 
 class AlipayBillProcessor:

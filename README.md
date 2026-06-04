@@ -106,7 +106,7 @@ cp .env.example .env
 
 ```bash
 cp users.json.example users.json
-python addUser.py    # 交互式创建用户与 bcrypt 哈希
+python scripts/add_user.py    # 交互式创建用户与 bcrypt 哈希
 ```
 
 Docker 部署时 compose 会将 `./users.json` 挂载进容器，请在宿主机准备好该文件。
@@ -171,7 +171,7 @@ docker compose up -d --build web backup
 
 ### 录入
 
-- **单条录入**：选择收入/支出类型与分类（见 `bill_types.py`），填写日期、金额、备注。
+- **单条录入**：选择收入/支出类型与分类（见 `bill_tracker/types.py`），填写日期、金额、备注。
 - **支付宝导入**：上传 CSV；按对方名称、商品名称等规则自动分类；未命中规则的可人工确认后入库。
 - **微信导入**：上传 XLSX（依赖 `openpyxl`）；支持收支类型识别与预览后导入。
 
@@ -211,27 +211,27 @@ cp classifier_keywords.example.json classifier_keywords.local.json
 定时备份由 `backup` 服务执行 `scripts/backup-loop.sh`；本地也可：
 
 ```bash
-python scheduled_backup.py
+python scripts/scheduled_backup.py
 ```
 
 ## 命令行导入（可选）
 
 与 Web 录入 Tab 能力相同，适合批量或脚本化：
 
-**支付宝**（CSV 放 `csv/ali/`）：
+**支付宝**（CSV 放 `csv/alipay/`）：
 
 ```bash
-python import_alipay_bills.py
-python import_alipay_bills.py your-alipay-bill.csv
+python scripts/import_alipay_bills.py
+python scripts/import_alipay_bills.py your-alipay-bill.csv
 ```
 
 必需列：`创建时间`、`商品名称`、`订单金额(元)`、`对方名称`（`分类` 可选）。
 
-**微信**（XLSX 放 `csv/tencent/`）：
+**微信**（XLSX 放 `csv/wechat/`）：
 
 ```bash
-python import_wechat_bills.py csv/tencent/your-wechat-bill.xlsx
-python import_wechat_bills.py csv/tencent/your-wechat-bill.xlsx --preview
+python scripts/import_wechat_bills.py csv/wechat/your-wechat-bill.xlsx
+python scripts/import_wechat_bills.py csv/wechat/your-wechat-bill.xlsx --preview
 ```
 
 必需列：`交易时间`、`交易对方`、`商品`、`收/支`、`金额(元)`（`分类` 可选）。
@@ -252,28 +252,38 @@ python import_wechat_bills.py csv/tencent/your-wechat-bill.xlsx --preview
 
 ```
 .
-├── app.py                      # Streamlit 主应用（导航、各页面）
-├── database.py                 # Mongo 访问、查询、备份与恢复
-├── user_manager.py             # 登录与改密（库优先）
-├── bill_types.py               # 收入/支出分类枚举
-├── bill_classifier.py          # 导入分类（默认 + local 合并）
-├── alipay_bill_processor.py
-├── wechat_bill_processor.py
-├── import_alipay_bills.py
-├── import_wechat_bills.py
-├── scheduled_backup.py
-├── scripts/backup-loop.sh      # Docker backup 入口循环
-├── data/                       # 快照与 manifest（运行时生成）
+├── app.py                      # Streamlit 入口（薄封装）
+├── bill_tracker/               # 应用包（PEP 8：模块 snake_case）
+│   ├── types.py                # 收入/支出分类枚举
+│   ├── paths.py                # 项目根目录、data/logs/csv 路径
+│   ├── utils.py
+│   ├── auth/user_manager.py
+│   ├── db/database.py          # Mongo、备份与恢复
+│   ├── classification/classifier.py
+│   ├── import_/                # 支付宝/微信处理器（import_ 避免关键字冲突）
+│   │   ├── alipay_processor.py
+│   │   └── wechat_processor.py
+│   └── ui/app.py               # Streamlit 页面与交互
+├── scripts/
+│   ├── add_user.py
+│   ├── import_alipay_bills.py
+│   ├── import_wechat_bills.py
+│   ├── scheduled_backup.py
+│   └── backup-loop.sh
+├── csv/alipay/                 # 支付宝账单 CSV（可选）
+├── csv/wechat/                 # 微信账单 XLSX（可选）
+├── data/                       # 快照与 manifest（.gitignore）
 ├── logs/
-├── static/                     # README 截图等资源
-├── users.json.example
-├── classifier_keywords.example.json
+├── static/
+├── pyproject.toml              # Ruff 等工具配置
 ├── Dockerfile
 ├── docker-compose.yml
 ├── Makefile
 ├── requirements.txt
 └── .env.example
 ```
+
+代码风格：遵循 [PEP 8](https://peps.python.org/pep-0008/)（`snake_case` 模块、`CapWords` 类名）。本地检查：`ruff check .`（需已安装 ruff）。
 
 ## 安全与开源注意
 

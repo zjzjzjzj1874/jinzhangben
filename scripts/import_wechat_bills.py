@@ -4,30 +4,35 @@
 微信账单导入脚本
 
 使用方法:
-    python import_wechat_bills.py <excel_file_path>
-    
+    python scripts/import_wechat_bills.py <excel_file_path> [--preview]
+
 示例:
-    python import_wechat_bills.py ./csv/tencent/20250721-20250803_parse.xlsx
+    python scripts/import_wechat_bills.py ./csv/wechat/bill.xlsx
 """
 
 import sys
 import os
-import pandas as pd
-from datetime import datetime
-from loguru import logger
-from database import BillDatabase
-from wechat_bill_processor import WechatBillProcessor
+from pathlib import Path
 
-class WechatBillImporter:
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import pandas as pd
+from loguru import logger
+
+from bill_tracker.db import BillDatabase
+from bill_tracker.import_ import WeChatBillProcessor
+from bill_tracker.paths import get_log_dir
+
+
+class WeChatBillImporter:
     """微信账单导入器"""
     
     def __init__(self):
         """初始化导入器"""
         self.db = BillDatabase()
-        self.processor = WechatBillProcessor(self.db)
-        
-        # 配置日志
-        log_dir = os.path.join(os.path.dirname(__file__), 'logs')
+        self.processor = WeChatBillProcessor(self.db)
+
+        log_dir = get_log_dir()
         os.makedirs(log_dir, exist_ok=True)
         logger.add(
             os.path.join(log_dir, 'wechat_import_{time:YYYY-MM-DD}.log'),
@@ -105,16 +110,15 @@ class WechatBillImporter:
 def main():
     """主函数"""
     if len(sys.argv) < 2:
-        print("使用方法: python import_wechat_bills.py <excel_file_path> [--preview]")
-        print("示例: python import_wechat_bills.py ./csv/tencent/20250721-20250803_parse.xlsx")
-        print("预览模式: python import_wechat_bills.py ./csv/tencent/20250721-20250803_parse.xlsx --preview")
+        print('使用方法: python scripts/import_wechat_bills.py <excel_file_path> [--preview]')
+        print('示例: python scripts/import_wechat_bills.py ./csv/wechat/bill.xlsx')
         sys.exit(1)
     
     file_path = sys.argv[1]
     preview_only = '--preview' in sys.argv
     
     try:
-        importer = WechatBillImporter()
+        importer = WeChatBillImporter()
         bills, unclassified_count, success_count, error_count = importer.import_from_file(
             file_path, 
             auto_classify=True, 

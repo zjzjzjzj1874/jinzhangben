@@ -8,7 +8,7 @@ cd /app
 echo "[backup-loop] 启动，间隔 ${INTERVAL}s"
 while true; do
   echo "[backup-loop] $(date '+%Y-%m-%d %H:%M:%S') 开始备份"
-  python scheduled_backup.py || echo "[backup-loop] 本次备份失败，将在下个周期重试"
+  python scripts/scheduled_backup.py || echo "[backup-loop] 本次备份失败，将在下个周期重试"
   echo "[backup-loop] 等待 ${INTERVAL}s"
   sleep "$INTERVAL"
 done

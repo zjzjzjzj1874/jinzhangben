@@ -12,8 +12,10 @@ import pandas as pd
 from loguru import logger
 
 # 本地私有关键词文件（含个人敏感词，已在 .gitignore 中忽略，不会开源泄露）
+from bill_tracker.paths import PROJECT_ROOT
+
 LOCAL_KEYWORDS_FILE = os.path.join(
-    os.path.dirname(__file__), 'classifier_keywords.local.json'
+    PROJECT_ROOT, 'classifier_keywords.local.json'
 )
 
 # 默认通用映射表：仅保留全国连锁/通用词，不含城市、车牌、个人姓名、常去店铺等隐私信息

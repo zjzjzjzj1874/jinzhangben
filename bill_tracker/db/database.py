@@ -9,23 +9,21 @@ import re
 import json
 import glob
 import shutil
-from bill_types import BillCategory
+from bill_tracker.paths import (
+    get_data_root,
+    get_manifest_path,
+    get_pre_restore_dir,
+    get_snapshots_dir,
+    get_yearly_dir,
+    get_log_dir,
+)
+from bill_tracker.utils import get_client_ip
 from datetime import timedelta
 from dateutil.relativedelta import relativedelta
 import math
 
-# 配置日志
-log_dir = os.path.join(os.path.dirname(__file__), 'logs')
+log_dir = get_log_dir()
 os.makedirs(log_dir, exist_ok=True)
-
-# 获取本机IP地址的函数
-def get_client_ip():
-    try:
-        import socket
-        return socket.gethostbyname(socket.gethostname())
-    except Exception as e:
-        logger.warning(f"获取IP地址失败: {e}")
-        return "Unknown"
 
 logger.add(os.path.join(log_dir, 'bill_database_{time:YYYY-MM-DD}.log'), 
            rotation='1 day',  # 按天切割
@@ -39,28 +37,6 @@ BACKUP_VERSION = '2.1'
 RESTORE_MODE_BILLS_ONLY = 'bills_only'
 RESTORE_MODE_FULL_REPLACE = 'full_replace'
 RESTORE_MODE_MERGE = 'merge'
-
-
-def get_data_root():
-    """数据根目录（Docker 一般为 /app/data）"""
-    base = os.path.dirname(os.path.abspath(__file__))
-    return os.getenv('DATA_DIR', os.path.join(base, 'data'))
-
-
-def get_snapshots_dir():
-    return os.path.join(get_data_root(), 'snapshots')
-
-
-def get_pre_restore_dir():
-    return os.path.join(get_data_root(), 'pre_restore')
-
-
-def get_yearly_dir():
-    return os.path.join(get_data_root(), 'yearly')
-
-
-def get_manifest_path():
-    return os.path.join(get_data_root(), 'manifest.json')
 
 
 class BillDatabase:

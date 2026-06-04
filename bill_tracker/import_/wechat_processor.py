@@ -1,9 +1,10 @@
 import pandas as pd
 from datetime import datetime
 from loguru import logger
-from bill_classifier import UniversalBillClassifier
+from bill_tracker.classification import UniversalBillClassifier
 
-class WechatBillProcessor:
+
+class WeChatBillProcessor:
     """微信账单处理器"""
     
     def __init__(self, database=None):
